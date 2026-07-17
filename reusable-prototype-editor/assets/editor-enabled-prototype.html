@@ -1,0 +1,354 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Editor-Enabled Prototype</title>
+  <style>
+    :root {
+      --brand: #5b5cf0;
+      --brand-contrast: #fff;
+      --page: #f5f6fb;
+      --surface: #fff;
+      --surface-soft: #ececff;
+      --text: #172033;
+      --muted: #667085;
+      --border: #dde2ec;
+      --radius: 20px;
+      --shadow: 0 24px 70px rgba(36,42,75,.12);
+      --content: 1120px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--page);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    a { color: inherit; }
+    button, input, textarea, select { font: inherit; }
+    .wrap { width: min(var(--content), calc(100% - 32px)); margin: 0 auto; }
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid var(--border);
+      background: color-mix(in srgb, var(--page) 88%, transparent);
+      backdrop-filter: blur(14px);
+    }
+    nav {
+      min-height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 22px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 850; text-decoration: none; }
+    .mark {
+      width: 34px; height: 34px; display: grid; place-items: center;
+      border-radius: 11px; background: var(--brand); color: white;
+    }
+    .links { display: flex; align-items: center; gap: 22px; }
+    .links a { color: var(--muted); text-decoration: none; font-size: .94rem; }
+    .button {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-height: 46px; padding: 0 18px; border: 1px solid var(--brand);
+      border-radius: 11px; background: var(--brand); color: var(--brand-contrast);
+      font-weight: 800; text-decoration: none; cursor: pointer;
+    }
+    .button.secondary { background: var(--surface); color: var(--text); border-color: var(--border); }
+    .hero { padding: 90px 0 66px; }
+    .hero-grid { display: grid; grid-template-columns: 1.05fr .95fr; gap: 48px; align-items: center; }
+    .eyebrow {
+      display: inline-flex; margin-bottom: 18px; padding: 7px 11px;
+      border: 1px solid color-mix(in srgb, var(--brand) 26%, var(--border));
+      border-radius: 999px; background: var(--surface-soft); color: var(--brand);
+      font-size: .8rem; font-weight: 800;
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { max-width: 10ch; margin-bottom: 22px; font-size: clamp(3rem,7vw,6rem); line-height: .95; letter-spacing: -.06em; }
+    h2 { margin-bottom: 14px; font-size: clamp(2rem,4vw,3.4rem); line-height: 1; letter-spacing: -.045em; }
+    h3 { margin-bottom: 10px; }
+    .lead { max-width: 58ch; color: var(--muted); font-size: 1.08rem; line-height: 1.72; }
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+    .preview {
+      padding: 15px; border: 1px solid var(--border); border-radius: 30px;
+      background: var(--surface); box-shadow: var(--shadow);
+    }
+    .preview-body {
+      min-height: 400px; padding: 24px; border-radius: 20px; color: white;
+      background: radial-gradient(circle at 85% 10%, #6467c7, transparent 30%), linear-gradient(145deg,#171a30,#2b3157);
+    }
+    .metric-label { color: #b8bfde; font-size: .78rem; text-transform: uppercase; letter-spacing: .12em; }
+    .metric { margin: 8px 0 28px; font-size: 3.7rem; font-weight: 850; letter-spacing: -.06em; }
+    .chart { height: 180px; display: flex; align-items: end; gap: 10px; padding: 18px; border-radius: 18px; background: rgba(255,255,255,.08); }
+    .bar { flex: 1; border-radius: 8px 8px 3px 3px; background: linear-gradient(#a5a7ff,var(--brand)); }
+    .section { padding: 82px 0; }
+    .section-head { max-width: 720px; margin-bottom: 32px; }
+    .cards { display: grid; grid-template-columns: repeat(3,1fr); gap: 18px; }
+    .card {
+      min-height: 240px; padding: 26px; border: 1px solid var(--border);
+      border-radius: var(--radius); background: var(--surface);
+      box-shadow: 0 14px 40px rgba(36,42,75,.06);
+    }
+    .icon {
+      width: 44px; height: 44px; display: grid; place-items: center;
+      margin-bottom: 42px; border-radius: 13px; background: var(--surface-soft);
+      color: var(--brand); font-weight: 850;
+    }
+    .card p { color: var(--muted); line-height: 1.65; }
+    .cta {
+      display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 26px;
+      padding: 42px; border-radius: 30px; background: var(--text); color: white;
+      box-shadow: var(--shadow);
+    }
+    .cta p { margin-bottom: 0; color: #bbc2d2; line-height: 1.65; }
+    footer { padding: 34px 0 52px; color: var(--muted); text-align: center; font-size: .9rem; }
+    @media (max-width: 820px) {
+      .hero-grid, .cta { grid-template-columns: 1fr; }
+      .cards { grid-template-columns: 1fr; }
+      .links a:not(.button) { display: none; }
+      .hero { padding-top: 58px; }
+    }
+  </style>
+</head>
+<body>
+  <main data-ai-canvas>
+    <header data-ai-id="site-header" data-ai-section="navigation" data-ai-label="Site header">
+      <nav class="wrap" aria-label="Main navigation">
+        <a class="brand" href="#" data-ai-id="brand-link" data-ai-component="brand" data-ai-label="Product brand">
+          <span class="mark">N</span><span>Northstar</span>
+        </a>
+        <div class="links" data-ai-id="main-navigation" data-ai-label="Main navigation links">
+          <a href="#features" data-ai-id="nav-features">Features</a>
+          <a href="#workflow" data-ai-id="nav-workflow">Workflow</a>
+          <a class="button" href="#start" data-ai-id="nav-cta" data-ai-component="primary-button">Start building</a>
+        </div>
+      </nav>
+    </header>
+
+    <section class="hero" data-ai-id="section-hero" data-ai-section="hero" data-ai-label="Hero section">
+      <div class="wrap hero-grid">
+        <div data-ai-id="hero-content" data-ai-label="Hero content">
+          <div class="eyebrow" data-ai-id="hero-eyebrow">A clearer path from idea to interface</div>
+          <h1 data-ai-id="hero-title">Turn product thinking into momentum.</h1>
+          <p class="lead" data-ai-id="hero-description">
+            Northstar helps teams capture decisions, organize feedback, and move from rough concepts to confident product direction.
+          </p>
+          <div class="actions" data-ai-id="hero-actions">
+            <a class="button" href="#start" data-ai-id="hero-primary-action" data-ai-component="primary-button">Create a workspace</a>
+            <a class="button secondary" href="#features" data-ai-id="hero-secondary-action" data-ai-component="secondary-button">Explore features</a>
+          </div>
+        </div>
+
+        <div class="preview" data-ai-id="hero-preview" data-ai-component="product-preview" data-ai-label="Product dashboard preview">
+          <div class="preview-body">
+            <div class="metric-label">Weekly product confidence</div>
+            <div class="metric">84%</div>
+            <div class="chart" aria-label="Illustrative upward chart">
+              <span class="bar" style="height:28%"></span><span class="bar" style="height:38%"></span>
+              <span class="bar" style="height:34%"></span><span class="bar" style="height:52%"></span>
+              <span class="bar" style="height:66%"></span><span class="bar" style="height:62%"></span>
+              <span class="bar" style="height:82%"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="features" data-ai-id="section-features" data-ai-section="features" data-ai-label="Features section">
+      <div class="wrap">
+        <div class="section-head" data-ai-id="features-heading" data-ai-component="section-heading">
+          <div class="eyebrow" data-ai-id="features-eyebrow">Designed for clarity</div>
+          <h2 data-ai-id="features-title">One shared picture of the work.</h2>
+          <p class="lead" data-ai-id="features-description">Keep important context visible without turning the product process into another administration task.</p>
+        </div>
+        <div class="cards" data-ai-id="feature-grid" data-ai-component="card-grid">
+          <article class="card" data-ai-id="feature-context-card" data-ai-component="feature-card" data-ai-label="Capture context card">
+            <div class="icon">01</div><h3 data-ai-id="feature-context-title">Capture context</h3>
+            <p data-ai-id="feature-context-copy">Connect goals, assumptions, evidence, and decisions so every iteration has a clear reason.</p>
+          </article>
+          <article class="card" data-ai-id="feature-feedback-card" data-ai-component="feature-card" data-ai-label="Structure feedback card">
+            <div class="icon">02</div><h3 data-ai-id="feature-feedback-title">Structure feedback</h3>
+            <p data-ai-id="feature-feedback-copy">Turn scattered reactions into useful signals linked to the exact experience they describe.</p>
+          </article>
+          <article class="card" data-ai-id="feature-progress-card" data-ai-component="feature-card" data-ai-label="Show progress card">
+            <div class="icon">03</div><h3 data-ai-id="feature-progress-title">Show progress</h3>
+            <p data-ai-id="feature-progress-copy">Make the path from uncertainty to confidence visible to the entire product team.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="section" id="workflow" data-ai-id="section-workflow" data-ai-section="workflow">
+      <div class="wrap">
+        <div class="cta" id="start" data-ai-id="workflow-cta" data-ai-component="call-to-action" data-ai-label="Workflow call to action">
+          <div>
+            <h2 data-ai-id="workflow-title">Start with the idea. Improve with evidence.</h2>
+            <p data-ai-id="workflow-description">Create a shared workspace and keep every important decision connected to the user experience.</p>
+          </div>
+          <a class="button" href="#" data-ai-id="workflow-action" data-ai-component="primary-button">Start free</a>
+        </div>
+      </div>
+    </section>
+
+    <footer data-ai-id="site-footer" data-ai-section="footer">
+      Open the editor to select elements, preview changes, and export precise AI feedback.
+    </footer>
+  </main>
+
+  <script>
+  (() => {
+    "use strict";
+    const VERSION = "1.0";
+    const canvas = document.querySelector("[data-ai-canvas]") || document.body;
+    const state = { selecting:false, selected:null, operations:[], items:[], scope:"selected-only", viewport:"all", counter:1 };
+
+    const host = document.createElement("div");
+    host.id = "__ai_editor_host";
+    document.documentElement.appendChild(host);
+    const shadow = host.attachShadow({mode:"open"});
+
+    const overlay = document.createElement("div");
+    overlay.id = "__ai_editor_overlay";
+    Object.assign(overlay.style,{position:"fixed",display:"none",pointerEvents:"none",zIndex:"2147483646",border:"2px solid #6657f5",background:"rgba(102,87,245,.09)",borderRadius:"4px"});
+    document.documentElement.appendChild(overlay);
+
+    shadow.innerHTML = `
+      <style>
+        :host{all:initial}*{box-sizing:border-box}button,input,textarea,select{font:inherit}
+        .launch{position:fixed;right:18px;bottom:18px;z-index:2147483647;border:0;border-radius:999px;background:#171927;color:#fff;padding:13px 16px;font:800 13px system-ui;box-shadow:0 14px 35px #0004;cursor:pointer}
+        .panel{position:fixed;top:0;right:0;z-index:2147483647;width:min(390px,94vw);height:100vh;display:flex;flex-direction:column;background:#f6f7fa;color:#1d2432;border-left:1px solid #d9deea;box-shadow:-20px 0 50px #121a3028;font:13px/1.4 system-ui;transform:translateX(102%);transition:.2s}
+        .panel.open{transform:none}.head{display:flex;justify-content:space-between;align-items:center;padding:14px 15px;background:#fff;border-bottom:1px solid #dfe3ec}.title{font-weight:850}.sub{color:#7a8495;font-size:10px}
+        .x,.btn{border:1px solid #cfd5e2;border-radius:9px;background:#fff;color:#242b39;font-weight:750;cursor:pointer}.x{width:34px;height:34px}.scroll{overflow:auto;padding:13px}.block{margin-bottom:11px;padding:12px;border:1px solid #dfe3ec;border-radius:12px;background:#fff}
+        .label{margin-bottom:9px;color:#687386;font-size:10px;font-weight:850;text-transform:uppercase;letter-spacing:.08em}.select{width:100%;min-height:42px;border:1px solid #5b5cf0;border-radius:10px;background:#5b5cf0;color:#fff;font-weight:850;cursor:pointer}.select.active{background:#3428c8}
+        .target{margin-top:9px;font-weight:850;overflow-wrap:anywhere}.meta{margin-top:5px;color:#697386;font-size:11px;overflow-wrap:anywhere}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.field{display:grid;gap:4px}.full{grid-column:1/-1}
+        label{color:#596274;font-size:11px;font-weight:750}input,textarea,select{width:100%;border:1px solid #cfd5e2;border-radius:8px;background:#fff;color:#1f2634;padding:8px 9px;outline:none}input[type=color]{min-height:37px;padding:3px}textarea{min-height:84px;resize:vertical}
+        input:focus,textarea:focus,select:focus{border-color:#6657f5;box-shadow:0 0 0 3px #6657f51f}.hint{margin-top:8px;padding:9px;border-radius:8px;background:#f0efff;color:#4e458e;font-size:11px}.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}.btn{min-height:38px}.danger{color:#b42318}.count{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:999px;background:#ecebff;color:#4939c9;font-weight:850}
+        .foot{margin-top:auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 13px;background:#fff;border-top:1px solid #dfe3ec}.foot button{min-height:40px}.primary{background:#171927!important;color:#fff!important;border-color:#171927!important}.status{grid-column:1/-1;min-height:15px;color:#697386;font-size:10px;text-align:center}[disabled]{opacity:.48;cursor:not-allowed}
+      </style>
+      <button class="launch" id="launch">Edit & feedback</button>
+      <aside class="panel open" id="panel">
+        <div class="head"><div><div class="title">Visual feedback editor</div><div class="sub">Portable editor v${VERSION}</div></div><button class="x" id="close">×</button></div>
+        <div class="scroll">
+          <section class="block"><div class="label">1. Select target</div><button class="select" id="pick">Select an element</button><div class="target" id="target">No element selected</div><div class="meta" id="targetMeta">Click Select, then click an element on the page.</div></section>
+          <section class="block"><div class="label">2. Direct edits</div><div class="grid">
+            <div class="field full"><label>Visible text</label><input id="text" disabled></div>
+            <div class="field"><label>Font size</label><input id="fontSize" type="number" min="8" max="240" disabled></div>
+            <div class="field"><label>Weight</label><select id="weight" disabled><option>400</option><option>500</option><option>600</option><option>700</option><option>800</option><option>900</option></select></div>
+            <div class="field"><label>Text color</label><input id="color" type="color" disabled></div>
+            <div class="field"><label>Background</label><input id="background" type="color" disabled></div>
+            <div class="field"><label>Padding</label><input id="padding" type="number" min="0" max="240" disabled></div>
+            <div class="field"><label>Margin</label><input id="margin" type="number" min="0" max="240" disabled></div>
+            <div class="field"><label>Radius</label><input id="radius" type="number" min="0" max="240" disabled></div>
+            <div class="field"><label>Align</label><select id="align" disabled><option>left</option><option>center</option><option>right</option></select></div>
+            <div class="field"><label>Width</label><input id="width" type="number" min="1" max="3000" disabled></div>
+            <div class="field"><label>Height</label><input id="height" type="number" min="1" max="3000" disabled></div>
+            <div class="field full"><label>Scope</label><select id="scope" disabled><option value="selected-only">This element only</option><option value="same-component">All matching components</option></select></div>
+            <div class="field full"><label>Viewport</label><select id="viewport"><option value="all">All screen sizes</option><option value="desktop">Desktop</option><option value="tablet">Tablet</option><option value="mobile">Mobile</option></select></div>
+          </div><div class="row" style="margin-top:9px"><button class="btn" id="undo">Undo</button><button class="btn" id="reset">Reset inline styles</button></div></section>
+          <section class="block"><div class="label">3. Informal feedback</div><div class="field"><label>Describe what feels wrong or what should improve</label><textarea id="note" placeholder="This card feels too busy. Make it more premium, but keep its size."></textarea></div><div class="hint" id="hint">ChatGPT will translate vague wording into design terms before editing.</div><button class="select" id="add" style="margin-top:9px" disabled>Add target to feedback</button></section>
+          <section class="block"><div class="label">Feedback set</div><div class="row"><div><strong>Targets</strong> <span class="count" id="count">0</span></div><button class="btn danger" id="clear">Clear</button></div><div class="meta" id="summary">No targets added.</div></section>
+        </div>
+        <div class="foot"><button class="btn" id="copy">Copy Markdown</button><button class="btn" id="downloadMd">Download .md</button><button class="btn primary" id="downloadHtml">Download HTML</button><button class="btn" id="hide">Hide panel</button><div class="status" id="status"></div></div>
+      </aside>`;
+
+    const $ = id => shadow.getElementById(id);
+    const panel = $("panel"), launch = $("launch");
+    const controls = ["text","fontSize","weight","color","background","padding","margin","radius","align","width","height","scope"].map($);
+    const terms = [
+      [["pop","stand out","stronger"],"visual emphasis","contrast, scale, visual weight, separation"],
+      [["busy","cluttered","too much"],"reduced visual density","fewer accents, clearer hierarchy, more whitespace"],
+      [["premium","luxury"],"premium direction","restrained palette, refined typography, subtle depth"],
+      [["clean","cleaner"],"visual simplification","remove noise, align elements, add whitespace"],
+      [["cramped","tight"],"more breathing room","padding, gap, line height"],
+      [["friendly","friendlier"],"approachable styling","softer geometry, warmer tone"],
+      [["flat"],"stronger depth hierarchy","surface separation, border, shadow"],
+      [["boring"],"controlled visual interest","focal point, rhythm, brand detail"],
+      [["balanced","balance"],"visual balance","alignment, proportions, spacing rhythm"],
+      [["button feels lost","lost"],"stronger action hierarchy","contrast, size, placement, whitespace"]
+    ];
+
+    const esc = value => String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+    const md = value => String(value ?? "").replace(/\|/g,"\\|").replace(/\r?\n/g," ");
+    const px = value => Number.isFinite(parseFloat(value)) ? Math.round(parseFloat(value)) : "";
+    const status = msg => { $("status").textContent=msg; clearTimeout(status.t); status.t=setTimeout(()=>$("status").textContent="",2300); };
+    const isCanvas = el => el instanceof Element && canvas.contains(el) && !host.contains(el) && el!==overlay;
+    const shortText = (el,n=90) => ((el.innerText||el.textContent||"").replace(/\s+/g," ").trim().slice(0,n));
+    const section = el => { const s=el.closest("[data-ai-section],section,header,nav,main,footer"); return s ? (s.dataset.aiLabel||s.dataset.aiSection||s.id||s.tagName.toLowerCase()) : "unknown"; };
+    const label = el => el.dataset.aiLabel||el.getAttribute("aria-label")||shortText(el,50)||el.dataset.aiComponent||el.id||el.tagName.toLowerCase();
+    const canText = el => ["H1","H2","H3","H4","H5","H6","P","SPAN","BUTTON","A","LABEL","LI","SMALL","STRONG","EM"].includes(el.tagName)&&el.children.length===0;
+
+    function ensureId(el){
+      if(el.dataset.aiId) return el.dataset.aiId;
+      let base=(el.id||el.dataset.aiComponent||el.tagName.toLowerCase()).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"element";
+      let id; do{id=`${base}-editor-${state.counter++}`}while(document.querySelector(`[data-ai-id="${CSS.escape(id)}"]`));
+      el.dataset.aiId=id; return id;
+    }
+    function selector(el){ ensureId(el); return `[data-ai-id="${CSS.escape(el.dataset.aiId)}"]`; }
+    function rgbHex(v,f="#ffffff"){ if(!v||v==="transparent"||v.includes("rgba(0, 0, 0, 0)"))return f; if(v[0]==="#")return v.slice(0,7); const a=v.match(/[\d.]+/g); return a&&a.length>=3?"#"+a.slice(0,3).map(x=>Math.round(+x).toString(16).padStart(2,"0")).join(""):f; }
+    function targets(){ if(!state.selected)return[]; if(state.scope==="same-component"&&state.selected.dataset.aiComponent)return [...document.querySelectorAll(`[data-ai-component="${CSS.escape(state.selected.dataset.aiComponent)}"]`)].filter(isCanvas); return [state.selected]; }
+    function context(el){ const r=el.getBoundingClientRect(),s=getComputedStyle(el); return {aiId:ensureId(el),selector:selector(el),tag:el.tagName.toLowerCase(),label:label(el),section:section(el),component:el.dataset.aiComponent||"",role:el.getAttribute("role")||"",accessibleName:el.getAttribute("aria-label")||"",visibleText:shortText(el,160),classes:[...el.classList],bounds:{x:Math.round(r.x),y:Math.round(r.y),width:Math.round(r.width),height:Math.round(r.height)},computedStyles:{display:s.display,position:s.position,color:s.color,backgroundColor:s.backgroundColor,fontSize:s.fontSize,fontWeight:s.fontWeight,lineHeight:s.lineHeight,textAlign:s.textAlign,padding:s.padding,margin:s.margin,border:s.border,borderRadius:s.borderRadius,gap:s.gap,width:s.width,height:s.height}}; }
+    function move(el){ if(!el){overlay.style.display="none";return} const r=el.getBoundingClientRect(); Object.assign(overlay.style,{display:"block",left:`${r.left}px`,top:`${r.top}px`,width:`${r.width}px`,height:`${r.height}px`}); }
+    function setSelecting(on){ state.selecting=on; $("pick").classList.toggle("active",on); $("pick").textContent=on?"Click an element on the page…":"Select an element"; document.documentElement.style.cursor=on?"crosshair":""; if(!on)move(state.selected); }
+
+    function load(){
+      if(!state.selected){ controls.forEach(c=>c.disabled=true); $("add").disabled=true; return; }
+      const el=state.selected,s=getComputedStyle(el),r=el.getBoundingClientRect();
+      controls.forEach(c=>c.disabled=false); $("scope").disabled=!el.dataset.aiComponent; $("add").disabled=false;
+      $("text").disabled=!canText(el); $("text").value=canText(el)?el.textContent.trim():"";
+      $("fontSize").value=px(s.fontSize); $("weight").value=["400","500","600","700","800","900"].includes(s.fontWeight)?s.fontWeight:"400";
+      $("color").value=rgbHex(s.color,"#172033"); $("background").value=rgbHex(s.backgroundColor,"#ffffff");
+      $("padding").value=px(s.paddingTop); $("margin").value=px(s.marginTop); $("radius").value=px(s.borderTopLeftRadius);
+      $("align").value=["left","center","right"].includes(s.textAlign)?s.textAlign:"left"; $("width").value=Math.round(r.width); $("height").value=Math.round(r.height); $("scope").value=state.scope;
+    }
+    function select(el){ state.selected=el; ensureId(el); setSelecting(false); $("target").textContent=label(el); $("targetMeta").textContent=`${section(el)} · ${selector(el)}`; load(); move(el); panel.classList.add("open"); launch.style.display="none"; }
+    function record(el,type,property,before,after){
+      const id=ensureId(el), found=[...state.operations].reverse().find(o=>o.aiId===id&&o.type===type&&o.property===property&&o.scope===state.scope&&o.viewport===state.viewport);
+      if(found){found.after=after;return}
+      state.operations.push({aiId:id,selector:selector(el),label:label(el),section:section(el),component:el.dataset.aiComponent||"",type,property,before,after,scope:state.scope,viewport:state.viewport});
+    }
+    function style(property,value){ targets().forEach(el=>{const before=el.style.getPropertyValue(property)||getComputedStyle(el).getPropertyValue(property);el.style.setProperty(property,value);record(el,"set-style",property,before.trim(),value)});move(state.selected); }
+    function text(value){ targets().forEach(el=>{if(!canText(el))return;const before=el.textContent;el.textContent=value;record(el,"replace-text","textContent",before,value)});move(state.selected); }
+    function interpret(note){ const n=note.toLowerCase(); return terms.filter(t=>t[0].some(p=>n.includes(p))).map(t=>({term:t[1],suggestions:t[2]})); }
+    function hint(){ const m=interpret($("note").value); $("hint").innerHTML=m.length?m.map(x=>`<strong>${esc(x.term)}</strong>: ${esc(x.suggestions)}`).join("<br>"):"No standard phrase detected. ChatGPT will infer cautiously from the target and exact edits."; }
+    function add(){ if(!state.selected)return; const item={target:context(state.selected),note:$("note").value.trim(),heuristicInterpretation:interpret($("note").value),scope:state.scope,viewport:state.viewport}; const i=state.items.findIndex(x=>x.target.aiId===item.target.aiId); if(i>=0)state.items[i]=item;else state.items.push(item); $("note").value="";hint();summary();status("Target added"); }
+    function summary(){ $("count").textContent=state.items.length; $("summary").textContent=state.items.length?state.items.map(x=>x.target.label).join(" · "):"No targets added."; }
+
+    function buildMd(){
+      let items=[...state.items]; if(!items.length&&state.selected)items=[{target:context(state.selected),note:$("note").value.trim(),heuristicInterpretation:interpret($("note").value),scope:state.scope,viewport:state.viewport}];
+      const out=["# AI website revision request","","## Processing instruction for ChatGPT","","Treat the attached HTML as the source of truth. Before modifying it, silently translate the feedback into precise design terms such as hierarchy, emphasis, contrast, density, whitespace, alignment, rhythm, typography, surface separation, responsive scope, and component consistency.","","Validate heuristic interpretations against exact target metadata and browser operations. Prefer explicit before/after edits over vague prose. Apply the smallest coherent changes, preserve unrelated behavior and stable `data-ai-*` identifiers, keep the built-in editor, and return one complete self-contained HTML file.","","## Page context","",`- Title: ${md(document.title)}`,`- URL: ${md(location.href)}`,`- Viewport: ${innerWidth} × ${innerHeight}`,`- Editor version: ${VERSION}`,`- Exported: ${new Date().toISOString()}`,"","## Feedback targets",""];
+      if(!items.length)out.push("_No target was captured._","");
+      items.forEach((item,i)=>{out.push(`### ${i+1}. ${md(item.target.label)}`,"",`- Section: ${md(item.target.section)}`,`- Component: ${md(item.target.component||"Not specified")}`,`- Stable ID: \`${md(item.target.aiId)}\``,`- Selector: \`${md(item.target.selector)}\``,`- Visible text: ${md(item.target.visibleText||"None")}`,`- Scope: ${md(item.scope)}`,`- Viewport: ${md(item.viewport)}`,"","#### User feedback","",item.note||"_No written note. Use exact operations._","","#### Heuristic interpretation","",item.heuristicInterpretation.length?item.heuristicInterpretation.map(x=>`- ${md(x.term)}: ${md(x.suggestions)}`).join("\n"):"_No heuristic match. Infer cautiously._","","#### Target context","","```json",JSON.stringify(item.target,null,2),"```","")});
+      out.push("## Exact browser operations","","Treat these as stronger evidence than vague wording.","");
+      if(!state.operations.length)out.push("_No direct edits recorded._","");
+      else{out.push("| Target | Operation | Property | Before | After | Scope | Viewport |","|---|---|---|---|---|---|---|");state.operations.forEach(o=>out.push(`| ${md(o.label)} | ${md(o.type)} | \`${md(o.property)}\` | \`${md(o.before)}\` | \`${md(o.after)}\` | ${md(o.scope)} | ${md(o.viewport)} |`));out.push("","```json",JSON.stringify(state.operations,null,2),"```","")}
+      out.push("## Constraints","","- Preserve unrelated content, interactions, and responsive behavior.","- Keep one self-contained HTML file.","- Preserve the visual editor and stable identifiers.","- Consolidate inline styles into maintainable CSS when appropriate.","- Maintain accessible contrast and keyboard usability.","");
+      return out.join("\n");
+    }
+    async function copy(){ const value=buildMd(); try{await navigator.clipboard.writeText(value)}catch{const t=document.createElement("textarea");t.value=value;document.body.appendChild(t);t.select();document.execCommand("copy");t.remove()} status("Markdown copied"); }
+    function download(content,name,type){const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}
+    const filename=()=> (document.title||"prototype").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"prototype";
+
+    document.addEventListener("mousemove",e=>{if(state.selecting&&isCanvas(e.target))move(e.target)},true);
+    document.addEventListener("click",e=>{if(state.selecting&&isCanvas(e.target)){e.preventDefault();e.stopPropagation();select(e.target)}},true);
+    addEventListener("scroll",()=>state.selected&&move(state.selected),{passive:true}); addEventListener("resize",()=>state.selected&&move(state.selected));
+
+    $("pick").onclick=()=>setSelecting(!state.selecting);
+    $("close").onclick=$("hide").onclick=()=>{panel.classList.remove("open");launch.style.display="block";setSelecting(false);overlay.style.display="none"};
+    launch.onclick=()=>{panel.classList.add("open");launch.style.display="none";move(state.selected)};
+    $("scope").onchange=e=>{state.scope=e.target.value;load()}; $("viewport").onchange=e=>state.viewport=e.target.value;
+    $("text").oninput=e=>text(e.target.value); $("fontSize").oninput=e=>style("font-size",e.target.value+"px"); $("weight").onchange=e=>style("font-weight",e.target.value);
+    $("color").oninput=e=>style("color",e.target.value); $("background").oninput=e=>style("background-color",e.target.value); $("padding").oninput=e=>style("padding",e.target.value+"px");
+    $("margin").oninput=e=>style("margin",e.target.value+"px"); $("radius").oninput=e=>style("border-radius",e.target.value+"px"); $("align").onchange=e=>style("text-align",e.target.value);
+    $("width").oninput=e=>style("width",e.target.value+"px"); $("height").oninput=e=>style("height",e.target.value+"px"); $("note").oninput=hint; $("add").onclick=add;
+    $("undo").onclick=()=>{const o=state.operations.pop();if(!o)return status("Nothing to undo");const el=document.querySelector(o.selector);if(!el)return;if(o.type==="replace-text")el.textContent=o.before;else if(o.type==="reset-inline-styles"){if(o.before)el.setAttribute("style",o.before);else el.removeAttribute("style")}else{o.before?el.style.setProperty(o.property,o.before):el.style.removeProperty(o.property)}load();move(state.selected);status("Undone")};
+    $("reset").onclick=()=>{targets().forEach(el=>{const before=el.getAttribute("style")||"";el.removeAttribute("style");record(el,"reset-inline-styles","style",before,"")});load();move(state.selected);status("Inline styles reset")};
+    $("clear").onclick=()=>{state.operations=[];state.items=[];$("note").value="";hint();summary();status("Feedback cleared")};
+    $("copy").onclick=copy; $("downloadMd").onclick=()=>{download(buildMd(),filename()+"-feedback.md","text/markdown;charset=utf-8");status("Markdown downloaded")};
+    $("downloadHtml").onclick=()=>{const clone=document.documentElement.cloneNode(true);clone.querySelector("#__ai_editor_host")?.remove();clone.querySelector("#__ai_editor_overlay")?.remove();download("<!doctype html>\n"+clone.outerHTML,filename()+"-edited.html","text/html;charset=utf-8");status("HTML downloaded")};
+    hint(); summary();
+  })();
+  </script>
+</body>
+</html>
