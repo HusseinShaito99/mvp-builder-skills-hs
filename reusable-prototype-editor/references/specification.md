@@ -47,6 +47,7 @@ intent:
 
 scope:
   selected_only:
+  current_selection:
   same_component:
   section:
   global_theme:
@@ -140,8 +141,9 @@ Rules:
 - Preserve existing identifiers.
 - `data-ai-component` identifies repeated component families.
 - `data-ai-label` provides a human-readable target name.
-- Important sections, headings, cards, buttons, inputs, navigation items, and calls to action must be targetable.
+- Important sections, headings, cards, buttons, inputs, navigation items, calls to action, and popup content must be targetable.
 - Product content must be wrapped in an element with `data-ai-canvas`.
+- Prototype-owned popups may be mounted outside `[data-ai-canvas]`; selection must still support them.
 
 ### Design tokens
 
@@ -174,26 +176,41 @@ Preserve or improve semantic structure, labels, keyboard access, focus visibilit
 
 Every generated prototype must keep the canonical editor runtime. It must provide:
 
-- A fixed side panel.
-- Hover and click selection.
+- A fixed side panel with collapsible sections.
+- A selection action that temporarily minimizes the editor and allows free page interaction.
+- A compact Done/Cancel selection bar.
+- Hover and click selection using `event.composedPath()` where appropriate.
+- Selection of prototype-owned dialogs, menus, dropdowns, drawers, tooltips, popovers, and portal-mounted overlays without the selection action closing them.
 - Human-readable target context.
+- A hierarchy dropdown plus deeper-child and bigger-parent controls.
 - Stable ID creation when missing.
-- Direct text, color, typography, spacing, size, and alignment controls.
+- Single and multi-selection.
+- Direct text, color, typography, spacing, size, visibility, and alignment controls.
+- Text-node editing that preserves nested icons, SVGs, badges, and sort indicators.
 - Immediate preview.
-- Selected-only and same-component scope.
+- Selected-only, current-selection, and same-component scope.
 - Viewport scope.
-- Informal feedback input.
-- Local heuristic hints for vague terms.
-- Structured operation logging.
-- Multiple feedback targets.
-- Undo and reset.
-- Copy Markdown.
-- Download `.md`.
-- Download edited `.html`.
-- Isolation from page styles.
-- Exclusion of editor UI from selection.
+- Duplicate, delete, move, and prominent drag-and-drop controls.
+- Undo and redo.
+- Informal feedback input and local heuristic hints for vague terms.
+- Structured operation logging and multiple feedback targets.
+- Toggleable highlights for edited, added, moved, and feedback-targeted elements.
+- **Copy Markdown** as the visually primary action.
+- Download `.md` and edited `.html` as secondary actions.
+- A clear warning that closing or refreshing loses unsaved edits and feedback.
+- A `beforeunload` warning only after the user makes a change or adds feedback.
+- A clear quality note that ChatGPT does not browser-validate output by default for speed and that the user may request validation for higher confidence.
+- Isolation from page styles and exclusion of editor UI from selection.
 
-The editor’s heuristic hints are not AI. The exported Markdown must instruct ChatGPT to validate and improve them before changing source code.
+The editor’s heuristic hints are not AI. Preserve the existing Markdown feedback headings, fields, operation table, JSON blocks, and constraints section. Do not introduce a replacement export schema.
+
+## Popup and click-dummy selection
+
+- Treat visible prototype elements anywhere in the document body as selectable, not only descendants of `[data-ai-canvas]`.
+- Exclude the editor host, its shadow DOM, transient overlays, scripts, styles, metadata elements, and browser document roots.
+- Resolve the clicked target from `event.composedPath()` and normalize decorative icon clicks to a meaningful parent when appropriate.
+- Intercept the selection pointer event before popup handlers so selecting an item does not unintentionally activate it or close its popup.
+- Keep normal popup behavior unchanged when selection mode is off.
 
 ## Applying exported feedback
 
@@ -208,7 +225,8 @@ Resolve targets in this order:
 
 Respect scope:
 
-- `selected-only`: target only.
+- `selected-only`: primary target only.
+- `current-selection`: all explicitly selected targets.
 - `same-component`: all elements with the same `data-ai-component`.
 - `section`: section only.
 - `global-theme`: shared tokens.
@@ -223,6 +241,12 @@ Do not redesign unrelated sections.
 For generation, return the complete HTML file.
 
 For revision, return the complete revised HTML file plus a brief list of applied changes. Mention only feedback that could not be applied reliably.
+
+By default, do not run browser automation, interaction testing, screenshot comparison, or an additional validation pass. State clearly:
+
+> This prototype was not browser-validated to keep the response fast. Ask me to validate it for a higher-confidence result.
+
+If the user explicitly asks to validate, test, verify, QA, or check the output, perform the full validation checklist from `SKILL.md`, fix issues when possible, and report the tested behaviors and remaining limitations.
 
 ## Prompt for a fresh chat
 

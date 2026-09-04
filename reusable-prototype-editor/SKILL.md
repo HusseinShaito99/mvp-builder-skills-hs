@@ -51,24 +51,43 @@ Use this mode when the user provides HTML without the editor and asks to make it
 - Keep one self-contained HTML file that opens directly in a modern browser.
 - Preserve or improve semantic structure, labels, keyboard access, focus visibility, and contrast.
 - Preserve existing stable identifiers across revisions.
-- Make important sections, headings, cards, buttons, inputs, navigation items, and calls to action targetable.
+- Make important sections, headings, cards, buttons, inputs, navigation items, calls to action, and prototype-owned popup content targetable.
 - Keep shared design values in CSS custom properties and use media queries for viewport-specific changes.
 - Do not redesign unrelated sections during feedback application.
 - Do not claim an edit was applied when target evidence is ambiguous; preserve the original and note the limitation briefly.
+- Preserve the existing Markdown feedback format. Do not replace it with JSON, a ZIP handoff, or a new schema.
+- Keep **Copy Markdown** as the editor's primary action.
+
+## Default speed mode
+
+- Do not run browser automation, interaction testing, screenshot comparison, or a separate verification pass by default. Return the completed prototype promptly.
+- Never imply that an unvalidated prototype was tested or verified.
+- Clearly tell the user: **“This prototype was not browser-validated to keep the response fast. Ask me to validate it for a higher-confidence result.”**
+- When the user explicitly asks to validate, test, verify, QA, or check the prototype, enter Validation mode and perform the full checklist below.
 
 ## Canonical resources
 
 - `assets/editor-enabled-prototype.html`: canonical working implementation. Copy its editor runtime for generation or editor insertion.
-- `references/specification.md`: detailed rules for architecture, feedback normalization, evidence priority, vague feedback, target resolution, scope, and response behavior.
+- `references/specification.md`: detailed rules for architecture, feedback normalization, evidence priority, vague feedback, target resolution, scope, editor behavior, and response behavior.
 
-## Final verification
+## Validation mode — only when requested
 
-Before returning HTML, verify that:
+When the user explicitly requests validation, verify that:
 
 1. Exactly one `[data-ai-canvas]` product root exists.
 2. Important targets have unique, readable, stable `data-ai-id` values.
-3. The editor can open, select elements, preview edits, add feedback targets, undo/reset, copy or download Markdown, and download edited HTML.
-4. The editor UI cannot select itself and remains isolated from product styles.
-5. The page remains usable with the editor panel closed.
-6. Desktop and narrow-screen layouts remain functional.
-7. The response contains the complete file rather than omitted sections or placeholders.
+3. The editor opens and its sections collapse and expand.
+4. Selection mode minimizes the panel and permits free page selection.
+5. Open dialogs, menus, dropdowns, drawers, tooltips, and portal-mounted popup content remain selectable without closing unexpectedly.
+6. Selection hierarchy controls move between deeper children and bigger parents.
+7. Nested labels can be edited without removing icons, SVGs, badges, or sort indicators.
+8. Multi-select and compatible bulk edits work.
+9. Duplicate, delete, hide/show, reorder, drag-and-drop, undo, and redo work.
+10. Change highlights distinguish edited, added, moved, and feedback-targeted elements.
+11. Copy Markdown is the primary action and the exported Markdown keeps the canonical format.
+12. The progress-loss warning appears and `beforeunload` activates only after edits or feedback.
+13. Downloaded HTML removes transient editor overlays while preserving the editor runtime and applied changes.
+14. The editor UI cannot select itself and remains isolated from product styles.
+15. Desktop and narrow-screen layouts remain functional.
+
+After requested validation, report what was tested, what passed, and any remaining limitations. Do not use the default “not browser-validated” notice after a successful validation pass.
