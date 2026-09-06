@@ -200,39 +200,114 @@
   <script>
   (() => {
     "use strict";
-    const VERSION = "1.0";
+
+    const VERSION = "2.0";
+    const HOST_ID = "__ai_editor_host";
+    const OVERLAY_ID = "__ai_editor_overlay";
+    const INTERACTION_STYLE_ID = "__ai_editor_interaction_style";
+    const CHANGE_STYLE_ID = "__ai_editor_change_style";
     const canvas = document.querySelector("[data-ai-canvas]") || document.body;
-    const state = { selecting:false, selected:null, operations:[], items:[], scope:"selected-only", viewport:"all", counter:1 };
+
+    const existingHost = document.getElementById(HOST_ID);
+    if (existingHost) {
+      existingHost.__aiEditorOpen?.();
+      return;
+    }
+
+    const state = {
+      selecting: false,
+      multiSelect: false,
+      dragEnabled: false,
+      highlightsEnabled: true,
+      selected: [],
+      primary: null,
+      hover: null,
+      selectionPath: [],
+      selectionPathIndex: 0,
+      previousSelection: [],
+      previousPrimary: null,
+      operations: [],
+      items: [],
+      history: [],
+      historyIndex: 0,
+      scope: "selected-only",
+      viewport: "all",
+      counter: 1,
+      operationCounter: 1,
+      dragging: [],
+      dirty: false,
+    };
 
     const host = document.createElement("div");
-    host.id = "__ai_editor_host";
+    host.id = HOST_ID;
     document.documentElement.appendChild(host);
-    const shadow = host.attachShadow({mode:"open"});
+    const shadow = host.attachShadow({ mode: "open" });
 
     const overlay = document.createElement("div");
-    overlay.id = "__ai_editor_overlay";
-    Object.assign(overlay.style,{position:"fixed",display:"none",pointerEvents:"none",zIndex:"2147483646",border:"2px solid #6657f5",background:"rgba(102,87,245,.09)",borderRadius:"4px"});
+    overlay.id = OVERLAY_ID;
+    Object.assign(overlay.style, {
+      position: "fixed",
+      display: "none",
+      pointerEvents: "none",
+      zIndex: "2147483645",
+      border: "2px solid #6657f5",
+      background: "rgba(102,87,245,.09)",
+      borderRadius: "4px",
+    });
     document.documentElement.appendChild(overlay);
+
+    const interactionStyle = document.createElement("style");
+    interactionStyle.id = INTERACTION_STYLE_ID;
+    interactionStyle.textContent = `
+      [data-ai-editor-selected="true"] { outline: 2px solid #6657f5 !important; outline-offset: 3px !important; }
+      [data-ai-editor-primary="true"] { outline-width: 3px !important; }
+      [data-ai-editor-draggable="true"] { cursor: grab !important; box-shadow: 0 0 0 5px rgba(102,87,245,.14) !important; }
+      [data-ai-editor-dragging="true"] { opacity: .52 !important; }
+      [data-ai-editor-drop-target="before"] { box-shadow: inset 0 4px 0 #2563eb !important; }
+      [data-ai-editor-drop-target="after"] { box-shadow: inset 0 -4px 0 #2563eb !important; }
+    `;
+    document.head.appendChild(interactionStyle);
+
+    const changeStyle = document.createElement("style");
+    changeStyle.id = CHANGE_STYLE_ID;
+    changeStyle.textContent = `
+      [data-ai-editor-change] { outline: 3px solid #f59e0b !important; outline-offset: 4px !important; }
+      [data-ai-editor-change~="added"] { outline-color: #16a34a !important; }
+      [data-ai-editor-change~="moved"] { outline-color: #2563eb !important; }
+      [data-ai-editor-change~="feedback"] { box-shadow: 0 0 0 5px rgba(126,34,206,.2) !important; }
+    `;
+    document.head.appendChild(changeStyle);
 
     shadow.innerHTML = `
       <style>
         :host{all:initial}*{box-sizing:border-box}button,input,textarea,select{font:inherit}
         .launch{position:fixed;right:18px;bottom:18px;z-index:2147483647;border:0;border-radius:999px;background:#171927;color:#fff;padding:13px 16px;font:800 13px system-ui;box-shadow:0 14px 35px #0004;cursor:pointer}
-        .panel{position:fixed;top:0;right:0;z-index:2147483647;width:min(390px,94vw);height:100vh;display:flex;flex-direction:column;background:#f6f7fa;color:#1d2432;border-left:1px solid #d9deea;box-shadow:-20px 0 50px #121a3028;font:13px/1.4 system-ui;transform:translateX(102%);transition:.2s}
-        .panel.open{transform:none}.head{display:flex;justify-content:space-between;align-items:center;padding:14px 15px;background:#fff;border-bottom:1px solid #dfe3ec}.title{font-weight:850}.sub{color:#7a8495;font-size:10px}
-        .x,.btn{border:1px solid #cfd5e2;border-radius:9px;background:#fff;color:#242b39;font-weight:750;cursor:pointer}.x{width:34px;height:34px}.scroll{overflow:auto;padding:13px}.block{margin-bottom:11px;padding:12px;border:1px solid #dfe3ec;border-radius:12px;background:#fff}
-        .label{margin-bottom:9px;color:#687386;font-size:10px;font-weight:850;text-transform:uppercase;letter-spacing:.08em}.select{width:100%;min-height:42px;border:1px solid #5b5cf0;border-radius:10px;background:#5b5cf0;color:#fff;font-weight:850;cursor:pointer}.select.active{background:#3428c8}
-        .target{margin-top:9px;font-weight:850;overflow-wrap:anywhere}.meta{margin-top:5px;color:#697386;font-size:11px;overflow-wrap:anywhere}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.field{display:grid;gap:4px}.full{grid-column:1/-1}
-        label{color:#596274;font-size:11px;font-weight:750}input,textarea,select{width:100%;border:1px solid #cfd5e2;border-radius:8px;background:#fff;color:#1f2634;padding:8px 9px;outline:none}input[type=color]{min-height:37px;padding:3px}textarea{min-height:84px;resize:vertical}
-        input:focus,textarea:focus,select:focus{border-color:#6657f5;box-shadow:0 0 0 3px #6657f51f}.hint{margin-top:8px;padding:9px;border-radius:8px;background:#f0efff;color:#4e458e;font-size:11px}.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}.btn{min-height:38px}.danger{color:#b42318}.count{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:999px;background:#ecebff;color:#4939c9;font-weight:850}
-        .foot{margin-top:auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 13px;background:#fff;border-top:1px solid #dfe3ec}.foot button{min-height:40px}.primary{background:#171927!important;color:#fff!important;border-color:#171927!important}.status{grid-column:1/-1;min-height:15px;color:#697386;font-size:10px;text-align:center}[disabled]{opacity:.48;cursor:not-allowed}
+        .panel{position:fixed;top:0;right:0;z-index:2147483647;width:min(420px,96vw);height:100vh;display:flex;flex-direction:column;background:#f6f7fa;color:#1d2432;border-left:1px solid #d9deea;box-shadow:-20px 0 50px #121a3028;font:13px/1.4 system-ui;transform:translateX(102%);transition:.2s}
+        .panel.open{transform:none}.head{display:flex;justify-content:space-between;align-items:center;padding:14px 15px;background:#fff;border-bottom:1px solid #dfe3ec}.title{font-weight:850}.sub{color:#7a8495;font-size:10px}.x{width:34px;height:34px}
+        .scroll{overflow:auto;padding:13px}.block{margin:0 0 11px;border:1px solid #dfe3ec;border-radius:12px;background:#fff;overflow:hidden}.block>summary{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px;cursor:pointer;color:#687386;font-size:10px;font-weight:850;text-transform:uppercase;letter-spacing:.08em;list-style:none}.block>summary::-webkit-details-marker{display:none}.block>summary::after{content:"+";font-size:16px}.block[open]>summary::after{content:"-"}.blockBody{padding:0 12px 12px}
+        .select,.btn,.x{border:1px solid #cfd5e2;border-radius:9px;background:#fff;color:#242b39;font-weight:750;cursor:pointer}.select{width:100%;min-height:42px;border-color:#5b5cf0;background:#5b5cf0;color:#fff;font-weight:850}.select.active{background:#3428c8}.btn{min-height:38px;padding:7px 9px}.primary{background:#171927!important;color:#fff!important;border-color:#171927!important}.danger{color:#b42318}.activeBtn{border-color:#6657f5;background:#f0efff;color:#4939c9}
+        .target{margin-top:9px;font-weight:850;overflow-wrap:anywhere}.meta{margin-top:5px;color:#697386;font-size:11px;overflow-wrap:anywhere}.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.field{display:grid;gap:4px}.full{grid-column:1/-1}.row{display:flex;gap:8px;align-items:center}.row>*{flex:1}
+        label{color:#596274;font-size:11px;font-weight:750}input,textarea,select{width:100%;border:1px solid #cfd5e2;border-radius:8px;background:#fff;color:#1f2634;padding:8px 9px;outline:none}input[type=color]{min-height:37px;padding:3px}input[type=checkbox]{width:auto}textarea{min-height:84px;resize:vertical}
+        input:focus,textarea:focus,select:focus{border-color:#6657f5;box-shadow:0 0 0 3px #6657f51f}.hint{margin-top:8px;padding:9px;border-radius:8px;background:#f0efff;color:#4e458e;font-size:11px}.count{display:inline-grid;place-items:center;min-width:22px;height:22px;border-radius:999px;background:#ecebff;color:#4939c9;font-weight:850}.toggle{display:flex;gap:8px;align-items:center;padding:8px;border:1px solid #dfe3ec;border-radius:9px;background:#fafbfc}
+        .dragCard{display:grid;gap:7px;padding:11px;border:2px solid #cfd5e2;border-radius:11px;background:#fafbfc;cursor:pointer}.dragCard.active{border-color:#6657f5;background:#f0efff}.dragTitle{font-weight:850}.dragHelp{color:#697386;font-size:11px}.legend{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:9px;font-size:11px}.dot{display:inline-block;width:9px;height:9px;border-radius:99px;margin-right:5px}.orange{background:#f59e0b}.green{background:#16a34a}.blue{background:#2563eb}.purple{background:#7e22ce}
+        .feedbackList{display:grid;gap:7px;margin-top:9px}.feedbackItem{padding:8px;border:1px solid #dfe3ec;border-radius:9px;background:#fafbfc}.feedbackTop{display:flex;justify-content:space-between;gap:8px}.feedbackTitle{font-weight:800}.mini{font-size:10px;color:#697386}.removeFeedback{border:0;background:transparent;color:#b42318;cursor:pointer;font-weight:800}
+        .foot{margin-top:auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:12px 13px;background:#fff;border-top:1px solid #dfe3ec}.foot button{min-height:40px}.copyMain{grid-column:1/-1;min-height:48px!important;font-size:14px}.warning{grid-column:1/-1;padding:9px;border-radius:8px;background:#fff5e8;color:#8a4b08;font-size:10px;line-height:1.45}.quality{grid-column:1/-1;padding:9px;border-radius:8px;background:#eef4ff;color:#344b80;font-size:10px;line-height:1.45}.status{grid-column:1/-1;min-height:15px;color:#697386;font-size:10px;text-align:center}[disabled]{opacity:.48;cursor:not-allowed}
+        .selectionHud{position:fixed;left:50%;top:14px;z-index:2147483647;display:none;align-items:center;gap:8px;max-width:calc(100vw - 24px);padding:9px 10px;border:1px solid #d9deea;border-radius:12px;background:#171927;color:#fff;box-shadow:0 14px 40px #0005;font:750 12px system-ui;transform:translateX(-50%)}.selectionHud.show{display:flex}.selectionHudText{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.hudBtn{border:1px solid #ffffff38;border-radius:8px;background:#fff;color:#171927;padding:7px 10px;font-weight:800;cursor:pointer}.hudBtn.secondary{background:transparent;color:#fff}
       </style>
       <button class="launch" id="launch">Edit & feedback</button>
+      <div class="selectionHud" id="selectionHud"><span class="selectionHudText" id="selectionHudText">Select an element</span><button class="hudBtn" id="finishSelection">Done</button><button class="hudBtn secondary" id="cancelSelection">Cancel</button></div>
       <aside class="panel open" id="panel">
-        <div class="head"><div><div class="title">Visual feedback editor</div><div class="sub">Portable editor v${VERSION}</div></div><button class="x" id="close">×</button></div>
+        <div class="head"><div><div class="title">Visual feedback editor</div><div class="sub">Portable editor v${VERSION}</div></div><button class="x" id="close" aria-label="Close">x</button></div>
         <div class="scroll">
-          <section class="block"><div class="label">1. Select target</div><button class="select" id="pick">Select an element</button><div class="target" id="target">No element selected</div><div class="meta" id="targetMeta">Click Select, then click an element on the page.</div></section>
-          <section class="block"><div class="label">2. Direct edits</div><div class="grid">
+          <details class="block" open><summary>1. Select target</summary><div class="blockBody">
+            <button class="select" id="pick">Select an element</button>
+            <div class="row" style="margin-top:8px"><button class="btn" id="multi">Multiple select: off</button><button class="btn" id="clearSelection">Clear selection</button></div>
+            <div class="target" id="target">No element selected</div><div class="meta" id="targetMeta">Click Select, then choose an element anywhere in the prototype, including open popups.</div>
+            <div class="field" style="margin-top:9px"><label>Selection hierarchy</label><select id="selectionLevel" disabled></select></div>
+            <div class="row" style="margin-top:8px"><button class="btn" id="deeperSelection" disabled>Deeper child</button><button class="btn" id="biggerSelection" disabled>Bigger parent</button></div>
+          </div></details>
+
+          <details class="block" open><summary>2. Direct edits</summary><div class="blockBody"><div class="grid">
             <div class="field full"><label>Visible text</label><input id="text" disabled></div>
             <div class="field"><label>Font size</label><input id="fontSize" type="number" min="8" max="240" disabled></div>
             <div class="field"><label>Weight</label><select id="weight" disabled><option>400</option><option>500</option><option>600</option><option>700</option><option>800</option><option>900</option></select></div>
@@ -244,18 +319,45 @@
             <div class="field"><label>Align</label><select id="align" disabled><option>left</option><option>center</option><option>right</option></select></div>
             <div class="field"><label>Width</label><input id="width" type="number" min="1" max="3000" disabled></div>
             <div class="field"><label>Height</label><input id="height" type="number" min="1" max="3000" disabled></div>
-            <div class="field full"><label>Scope</label><select id="scope" disabled><option value="selected-only">This element only</option><option value="same-component">All matching components</option></select></div>
+            <div class="field full"><label>Scope</label><select id="scope" disabled><option value="selected-only">Primary element only</option><option value="current-selection">Current selection</option><option value="same-component">All matching components</option></select></div>
             <div class="field full"><label>Viewport</label><select id="viewport"><option value="all">All screen sizes</option><option value="desktop">Desktop</option><option value="tablet">Tablet</option><option value="mobile">Mobile</option></select></div>
-          </div><div class="row" style="margin-top:9px"><button class="btn" id="undo">Undo</button><button class="btn" id="reset">Reset inline styles</button></div></section>
-          <section class="block"><div class="label">3. Informal feedback</div><div class="field"><label>Describe what feels wrong or what should improve</label><textarea id="note" placeholder="This card feels too busy. Make it more premium, but keep its size."></textarea></div><div class="hint" id="hint">ChatGPT will translate vague wording into design terms before editing.</div><button class="select" id="add" style="margin-top:9px" disabled>Add target to feedback</button></section>
-          <section class="block"><div class="label">Feedback set</div><div class="row"><div><strong>Targets</strong> <span class="count" id="count">0</span></div><button class="btn danger" id="clear">Clear</button></div><div class="meta" id="summary">No targets added.</div></section>
+          </div><div class="row" style="margin-top:9px"><button class="btn" id="undo">Undo</button><button class="btn" id="redo">Redo</button></div><div class="row" style="margin-top:8px"><button class="btn" id="reset">Reset inline styles</button><button class="btn" id="hideElement">Hide/show</button></div></div></details>
+
+          <details class="block"><summary>3. Arrange elements</summary><div class="blockBody">
+            <div class="grid"><button class="btn" id="duplicate">Duplicate</button><button class="btn danger" id="delete">Delete</button><button class="btn" id="moveUp">Move up</button><button class="btn" id="moveDown">Move down</button></div>
+            <button class="dragCard" id="dragToggle" type="button" style="width:100%;margin-top:9px"><span class="dragTitle" id="dragTitle">Drag and drop: off</span><span class="dragHelp">Enable, then drag selected elements. Blue lines show before/after placement.</span></button>
+            <div class="meta">Structural DOM changes may need to be recreated in the application framework.</div>
+          </div></details>
+
+          <details class="block" open><summary>4. Informal feedback</summary><div class="blockBody">
+            <div class="field"><label>Describe what feels wrong or what should improve</label><textarea id="note" placeholder="This card feels too busy. Make it more premium, but keep its size."></textarea></div>
+            <div class="hint" id="hint">ChatGPT will translate vague wording into design terms before editing.</div>
+            <button class="select" id="add" style="margin-top:9px" disabled>Add target to feedback</button>
+            <div class="feedbackList" id="feedbackList"></div>
+          </div></details>
+
+          <details class="block"><summary>5. Review highlights</summary><div class="blockBody">
+            <label class="toggle"><input id="highlightToggle" type="checkbox" checked> Highlight edited, added, moved, and feedback targets</label>
+            <div class="legend"><span><i class="dot orange"></i>Edited</span><span><i class="dot green"></i>Added</span><span><i class="dot blue"></i>Moved</span><span><i class="dot purple"></i>Feedback</span></div>
+            <div class="meta" id="summary">No targets added.</div>
+            <button class="btn danger" id="clear" style="width:100%;margin-top:9px">Clear feedback log</button>
+          </div></details>
         </div>
-        <div class="foot"><button class="btn" id="copy">Copy Markdown</button><button class="btn" id="downloadMd">Download .md</button><button class="btn primary" id="downloadHtml">Download HTML</button><button class="btn" id="hide">Hide panel</button><div class="status" id="status"></div></div>
+        <div class="foot">
+          <button class="btn primary copyMain" id="copy">Copy Markdown</button>
+          <div class="warning"><strong>Unsaved progress:</strong> closing or refreshing this window loses edits and feedback.</div>
+          <div class="quality"><strong>Fast by default:</strong> ChatGPT does not browser-validate prototype changes unless you ask. Request validation for a slower, higher-confidence quality check.</div>
+          <button class="btn" id="downloadMd">Download .md</button><button class="btn" id="downloadHtml">Download HTML</button>
+          <button class="btn" id="hide">Hide panel</button><button class="btn" id="copyAgain">Copy again</button>
+          <div class="status" id="status"></div>
+        </div>
       </aside>`;
 
-    const $ = id => shadow.getElementById(id);
-    const panel = $("panel"), launch = $("launch");
+    const $ = (id) => shadow.getElementById(id);
+    const panel = $("panel");
+    const launch = $("launch");
     const controls = ["text","fontSize","weight","color","background","padding","margin","radius","align","width","height","scope"].map($);
+    const structuralControls = ["duplicate","delete","moveUp","moveDown","hideElement"].map($);
     const terms = [
       [["pop","stand out","stronger"],"visual emphasis","contrast, scale, visual weight, separation"],
       [["busy","cluttered","too much"],"reduced visual density","fewer accents, clearer hierarchy, more whitespace"],
@@ -269,85 +371,503 @@
       [["button feels lost","lost"],"stronger action hierarchy","contrast, size, placement, whitespace"]
     ];
 
-    const esc = value => String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-    const md = value => String(value ?? "").replace(/\|/g,"\\|").replace(/\r?\n/g," ");
-    const px = value => Number.isFinite(parseFloat(value)) ? Math.round(parseFloat(value)) : "";
-    const status = msg => { $("status").textContent=msg; clearTimeout(status.t); status.t=setTimeout(()=>$("status").textContent="",2300); };
-    const isCanvas = el => el instanceof Element && canvas.contains(el) && !host.contains(el) && el!==overlay;
-    const shortText = (el,n=90) => ((el.innerText||el.textContent||"").replace(/\s+/g," ").trim().slice(0,n));
-    const section = el => { const s=el.closest("[data-ai-section],section,header,nav,main,footer"); return s ? (s.dataset.aiLabel||s.dataset.aiSection||s.id||s.tagName.toLowerCase()) : "unknown"; };
-    const label = el => el.dataset.aiLabel||el.getAttribute("aria-label")||shortText(el,50)||el.dataset.aiComponent||el.id||el.tagName.toLowerCase();
-    const canText = el => ["H1","H2","H3","H4","H5","H6","P","SPAN","BUTTON","A","LABEL","LI","SMALL","STRONG","EM"].includes(el.tagName)&&el.children.length===0;
+    const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[char]);
+    const md = (value) => String(value ?? "").replace(/\|/g,"\\|").replace(/\r?\n/g," ");
+    const px = (value) => Number.isFinite(parseFloat(value)) ? Math.round(parseFloat(value)) : "";
+    const stamp = () => new Date().toISOString();
+    const status = (message) => { $("status").textContent = message; clearTimeout(status.timer); status.timer = setTimeout(() => $("status").textContent = "", 2400); };
+    const setDirty = () => { state.dirty = true; };
 
-    function ensureId(el){
-      if(el.dataset.aiId) return el.dataset.aiId;
-      let base=(el.id||el.dataset.aiComponent||el.tagName.toLowerCase()).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"element";
-      let id; do{id=`${base}-editor-${state.counter++}`}while(document.querySelector(`[data-ai-id="${CSS.escape(id)}"]`));
-      el.dataset.aiId=id; return id;
+    function isEditorNode(node) {
+      if (!(node instanceof Node)) return true;
+      return node === host || node === overlay || node === interactionStyle || node === changeStyle || node.getRootNode?.() === shadow;
     }
-    function selector(el){ ensureId(el); return `[data-ai-id="${CSS.escape(el.dataset.aiId)}"]`; }
-    function rgbHex(v,f="#ffffff"){ if(!v||v==="transparent"||v.includes("rgba(0, 0, 0, 0)"))return f; if(v[0]==="#")return v.slice(0,7); const a=v.match(/[\d.]+/g); return a&&a.length>=3?"#"+a.slice(0,3).map(x=>Math.round(+x).toString(16).padStart(2,"0")).join(""):f; }
-    function targets(){ if(!state.selected)return[]; if(state.scope==="same-component"&&state.selected.dataset.aiComponent)return [...document.querySelectorAll(`[data-ai-component="${CSS.escape(state.selected.dataset.aiComponent)}"]`)].filter(isCanvas); return [state.selected]; }
-    function context(el){ const r=el.getBoundingClientRect(),s=getComputedStyle(el); return {aiId:ensureId(el),selector:selector(el),tag:el.tagName.toLowerCase(),label:label(el),section:section(el),component:el.dataset.aiComponent||"",role:el.getAttribute("role")||"",accessibleName:el.getAttribute("aria-label")||"",visibleText:shortText(el,160),classes:[...el.classList],bounds:{x:Math.round(r.x),y:Math.round(r.y),width:Math.round(r.width),height:Math.round(r.height)},computedStyles:{display:s.display,position:s.position,color:s.color,backgroundColor:s.backgroundColor,fontSize:s.fontSize,fontWeight:s.fontWeight,lineHeight:s.lineHeight,textAlign:s.textAlign,padding:s.padding,margin:s.margin,border:s.border,borderRadius:s.borderRadius,gap:s.gap,width:s.width,height:s.height}}; }
-    function move(el){ if(!el){overlay.style.display="none";return} const r=el.getBoundingClientRect(); Object.assign(overlay.style,{display:"block",left:`${r.left}px`,top:`${r.top}px`,width:`${r.width}px`,height:`${r.height}px`}); }
-    function setSelecting(on){ state.selecting=on; $("pick").classList.toggle("active",on); $("pick").textContent=on?"Click an element on the page…":"Select an element"; document.documentElement.style.cursor=on?"crosshair":""; if(!on)move(state.selected); }
 
-    function load(){
-      if(!state.selected){ controls.forEach(c=>c.disabled=true); $("add").disabled=true; return; }
-      const el=state.selected,s=getComputedStyle(el),r=el.getBoundingClientRect();
-      controls.forEach(c=>c.disabled=false); $("scope").disabled=!el.dataset.aiComponent; $("add").disabled=false;
-      $("text").disabled=!canText(el); $("text").value=canText(el)?el.textContent.trim():"";
-      $("fontSize").value=px(s.fontSize); $("weight").value=["400","500","600","700","800","900"].includes(s.fontWeight)?s.fontWeight:"400";
-      $("color").value=rgbHex(s.color,"#172033"); $("background").value=rgbHex(s.backgroundColor,"#ffffff");
-      $("padding").value=px(s.paddingTop); $("margin").value=px(s.marginTop); $("radius").value=px(s.borderTopLeftRadius);
-      $("align").value=["left","center","right"].includes(s.textAlign)?s.textAlign:"left"; $("width").value=Math.round(r.width); $("height").value=Math.round(r.height); $("scope").value=state.scope;
+    function isSelectable(element) {
+      return element instanceof Element && !isEditorNode(element) && !["HTML","HEAD","SCRIPT","STYLE","LINK","META","BASE"].includes(element.tagName) && document.documentElement.contains(element);
     }
-    function select(el){ state.selected=el; ensureId(el); setSelecting(false); $("target").textContent=label(el); $("targetMeta").textContent=`${section(el)} · ${selector(el)}`; load(); move(el); panel.classList.add("open"); launch.style.display="none"; }
-    function record(el,type,property,before,after){
-      const id=ensureId(el), found=[...state.operations].reverse().find(o=>o.aiId===id&&o.type===type&&o.property===property&&o.scope===state.scope&&o.viewport===state.viewport);
-      if(found){found.after=after;return}
-      state.operations.push({aiId:id,selector:selector(el),label:label(el),section:section(el),component:el.dataset.aiComponent||"",type,property,before,after,scope:state.scope,viewport:state.viewport});
-    }
-    function style(property,value){ targets().forEach(el=>{const before=el.style.getPropertyValue(property)||getComputedStyle(el).getPropertyValue(property);el.style.setProperty(property,value);record(el,"set-style",property,before.trim(),value)});move(state.selected); }
-    function text(value){ targets().forEach(el=>{if(!canText(el))return;const before=el.textContent;el.textContent=value;record(el,"replace-text","textContent",before,value)});move(state.selected); }
-    function interpret(note){ const n=note.toLowerCase(); return terms.filter(t=>t[0].some(p=>n.includes(p))).map(t=>({term:t[1],suggestions:t[2]})); }
-    function hint(){ const m=interpret($("note").value); $("hint").innerHTML=m.length?m.map(x=>`<strong>${esc(x.term)}</strong>: ${esc(x.suggestions)}`).join("<br>"):"No standard phrase detected. ChatGPT will infer cautiously from the target and exact edits."; }
-    function add(){ if(!state.selected)return; const item={target:context(state.selected),note:$("note").value.trim(),heuristicInterpretation:interpret($("note").value),scope:state.scope,viewport:state.viewport}; const i=state.items.findIndex(x=>x.target.aiId===item.target.aiId); if(i>=0)state.items[i]=item;else state.items.push(item); $("note").value="";hint();summary();status("Target added"); }
-    function summary(){ $("count").textContent=state.items.length; $("summary").textContent=state.items.length?state.items.map(x=>x.target.label).join(" · "):"No targets added."; }
 
-    function buildMd(){
-      let items=[...state.items]; if(!items.length&&state.selected)items=[{target:context(state.selected),note:$("note").value.trim(),heuristicInterpretation:interpret($("note").value),scope:state.scope,viewport:state.viewport}];
-      const out=["# AI website revision request","","## Processing instruction for ChatGPT","","Treat the attached HTML as the source of truth. Before modifying it, silently translate the feedback into precise design terms such as hierarchy, emphasis, contrast, density, whitespace, alignment, rhythm, typography, surface separation, responsive scope, and component consistency.","","Validate heuristic interpretations against exact target metadata and browser operations. Prefer explicit before/after edits over vague prose. Apply the smallest coherent changes, preserve unrelated behavior and stable `data-ai-*` identifiers, keep the built-in editor, and return one complete self-contained HTML file.","","## Page context","",`- Title: ${md(document.title)}`,`- URL: ${md(location.href)}`,`- Viewport: ${innerWidth} × ${innerHeight}`,`- Editor version: ${VERSION}`,`- Exported: ${new Date().toISOString()}`,"","## Feedback targets",""];
+    function isStructural(element) {
+      return isSelectable(element) && !["BODY","MAIN"].includes(element.tagName);
+    }
+
+    function isDecorative(element) {
+      return element instanceof Element && (element.getAttribute("aria-hidden") === "true" || element.matches(".q-icon,.material-icons,.material-symbols-outlined,svg,path,use"));
+    }
+
+    function candidateFromEvent(event) {
+      const path = typeof event.composedPath === "function" ? event.composedPath() : [event.target];
+      let candidate = path.find((node) => isSelectable(node));
+      while (candidate && isDecorative(candidate) && candidate.parentElement) candidate = candidate.parentElement;
+      return candidate || null;
+    }
+
+    function editableTextNodes(element) {
+      if (!(element instanceof Element)) return [];
+      const nodes = [];
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        const parent = node.parentElement;
+        if (!parent || !node.nodeValue?.trim()) continue;
+        if (parent.closest('[aria-hidden="true"],.q-icon,.material-icons,.material-symbols-outlined,svg,script,style')) continue;
+        nodes.push(node);
+      }
+      return nodes;
+    }
+
+    function editableText(element) {
+      return editableTextNodes(element).map((node) => node.nodeValue.replace(/\s+/g," ").trim()).filter(Boolean).join(" ");
+    }
+
+    function shortText(element, max = 90) {
+      return editableText(element).slice(0, max);
+    }
+
+    function sectionName(element) {
+      const section = element?.closest("[data-ai-section],section,header,nav,main,footer,[role=dialog],[role=menu],[role=listbox]");
+      return section ? (section.dataset.aiLabel || section.dataset.aiSection || section.id || section.getAttribute("role") || section.tagName.toLowerCase()) : "unknown";
+    }
+
+    function elementLabel(element) {
+      return element?.dataset.aiLabel || element?.getAttribute("aria-label") || shortText(element, 50) || element?.dataset.aiComponent || element?.id || element?.tagName.toLowerCase() || "element";
+    }
+
+    function ensureId(element) {
+      if (element.dataset.aiId) return element.dataset.aiId;
+      let base = (element.id || element.dataset.aiComponent || element.tagName.toLowerCase()).toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"") || "element";
+      let id;
+      do { id = `${base}-editor-${state.counter++}`; } while (document.querySelector(`[data-ai-id="${CSS.escape(id)}"]`));
+      element.dataset.aiId = id;
+      return id;
+    }
+
+    function selector(element) {
+      return `[data-ai-id="${CSS.escape(ensureId(element))}"]`;
+    }
+
+    function rgbHex(value, fallback = "#ffffff") {
+      if (!value || value === "transparent" || value.includes("rgba(0, 0, 0, 0)")) return fallback;
+      if (value.startsWith("#")) return value.slice(0,7);
+      const values = value.match(/[\d.]+/g);
+      return values?.length >= 3 ? `#${values.slice(0,3).map((part) => Math.round(Number(part)).toString(16).padStart(2,"0")).join("")}` : fallback;
+    }
+
+    function context(element) {
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return {
+        aiId: ensureId(element), selector: selector(element), tag: element.tagName.toLowerCase(), label: elementLabel(element), section: sectionName(element),
+        component: element.dataset.aiComponent || "", role: element.getAttribute("role") || "", accessibleName: element.getAttribute("aria-label") || "",
+        visibleText: shortText(element,160), classes: [...element.classList],
+        bounds: {x:Math.round(rect.x),y:Math.round(rect.y),width:Math.round(rect.width),height:Math.round(rect.height)},
+        computedStyles: {display:style.display,position:style.position,color:style.color,backgroundColor:style.backgroundColor,fontSize:style.fontSize,fontWeight:style.fontWeight,lineHeight:style.lineHeight,textAlign:style.textAlign,padding:style.padding,margin:style.margin,border:style.border,borderRadius:style.borderRadius,gap:style.gap,width:style.width,height:style.height}
+      };
+    }
+
+    function moveOverlay(element) {
+      if (!element || !document.contains(element)) { overlay.style.display = "none"; return; }
+      const rect = element.getBoundingClientRect();
+      Object.assign(overlay.style, {display:"block",left:`${rect.left}px`,top:`${rect.top}px`,width:`${rect.width}px`,height:`${rect.height}px`});
+    }
+
+    function primary() {
+      return state.primary && document.contains(state.primary) ? state.primary : null;
+    }
+
+    function targets() {
+      const element = primary();
+      if (!element) return [];
+      if (state.scope === "current-selection") return state.selected.filter((item) => document.contains(item));
+      if (state.scope === "same-component" && element.dataset.aiComponent) return [...document.querySelectorAll(`[data-ai-component="${CSS.escape(element.dataset.aiComponent)}"]`)].filter(isSelectable);
+      return [element];
+    }
+
+    function updateSelectionMarks() {
+      document.querySelectorAll("[data-ai-editor-selected],[data-ai-editor-primary]").forEach((element) => {
+        element.removeAttribute("data-ai-editor-selected"); element.removeAttribute("data-ai-editor-primary");
+      });
+      state.selected = state.selected.filter((element) => document.contains(element));
+      if (!state.selected.includes(state.primary)) state.primary = state.selected.at(-1) || null;
+      state.selected.forEach((element) => element.setAttribute("data-ai-editor-selected","true"));
+      state.primary?.setAttribute("data-ai-editor-primary","true");
+      updateDraggables();
+    }
+
+    function selectionPathFor(element) {
+      const path = [];
+      let current = element;
+      const stop = canvas.contains(element) ? canvas : document.body;
+      while (current && current !== document.documentElement) {
+        if (isSelectable(current)) path.push(current);
+        if (current === stop) break;
+        current = current.parentElement;
+      }
+      return path;
+    }
+
+    function setPath(element) {
+      state.selectionPath = selectionPathFor(element);
+      state.selectionPathIndex = Math.max(0, state.selectionPath.indexOf(element));
+      renderHierarchy();
+    }
+
+    function renderHierarchy() {
+      const select = $("selectionLevel");
+      select.innerHTML = "";
+      state.selectionPath.forEach((element,index) => {
+        const option = document.createElement("option");
+        option.value = String(index);
+        option.textContent = `${element.tagName.toLowerCase()} - ${elementLabel(element)}`;
+        option.selected = index === state.selectionPathIndex;
+        select.appendChild(option);
+      });
+      select.disabled = state.selectionPath.length === 0;
+      $("deeperSelection").disabled = state.selectionPathIndex <= 0;
+      $("biggerSelection").disabled = state.selectionPathIndex >= state.selectionPath.length - 1;
+    }
+
+    function changePrimaryByPath(index) {
+      const element = state.selectionPath[index];
+      if (!element) return;
+      const oldPrimary = state.primary;
+      state.primary = element;
+      if (state.selected.length <= 1) state.selected = [element];
+      else state.selected = state.selected.map((item) => item === oldPrimary ? element : item);
+      state.selectionPathIndex = index;
+      updateSelectionMarks(); renderHierarchy(); loadControls(); moveOverlay(element);
+    }
+
+    function addSelection(element, additive) {
+      ensureId(element);
+      if (additive) {
+        if (state.selected.includes(element)) state.selected = state.selected.filter((item) => item !== element);
+        else state.selected.push(element);
+        state.primary = state.selected.at(-1) || null;
+      } else {
+        state.selected = [element]; state.primary = element;
+      }
+      setPath(state.primary || element);
+      if (state.selected.length > 1) state.scope = "current-selection";
+      updateSelectionMarks(); loadControls();
+    }
+
+    function clearSelection() {
+      state.selected = []; state.primary = null; state.selectionPath = []; state.selectionPathIndex = 0;
+      updateSelectionMarks(); renderHierarchy(); loadControls(); moveOverlay(null);
+    }
+
+    function startSelectionMode() {
+      state.previousSelection = [...state.selected]; state.previousPrimary = state.primary;
+      state.selecting = true;
+      panel.classList.remove("open"); launch.style.display = "none"; $("selectionHud").classList.add("show");
+      $("selectionHudText").textContent = state.multiSelect ? "Select multiple elements, then click Done" : "Select an element from the page";
+      document.documentElement.style.cursor = "crosshair";
+    }
+
+    function finishSelectionMode() {
+      state.selecting = false; $("selectionHud").classList.remove("show"); panel.classList.add("open"); launch.style.display = "none";
+      document.documentElement.style.cursor = ""; state.hover = null; moveOverlay(primary()); loadControls();
+    }
+
+    function cancelSelectionMode() {
+      state.selected = [...state.previousSelection]; state.primary = state.previousPrimary;
+      updateSelectionMarks(); setPath(state.primary); finishSelectionMode();
+    }
+
+    function loadControls() {
+      const element = primary();
+      const enabled = !!element;
+      controls.forEach((control) => control.disabled = !enabled);
+      structuralControls.forEach((control) => control.disabled = !enabled || !isStructural(element));
+      $("add").disabled = !enabled;
+      if (!element) {
+        $("target").textContent = "No element selected";
+        $("targetMeta").textContent = "Click Select, then choose an element anywhere in the prototype, including open popups.";
+        $("text").value = "";
+        renderSummary();
+        return;
+      }
+      const style = getComputedStyle(element), rect = element.getBoundingClientRect();
+      $("target").textContent = state.selected.length > 1 ? `${state.selected.length} elements selected` : elementLabel(element);
+      $("targetMeta").textContent = `${sectionName(element)} - ${selector(element)}`;
+      $("text").disabled = state.selected.length !== 1 || editableTextNodes(element).length === 0;
+      $("text").value = editableText(element);
+      $("fontSize").value = px(style.fontSize); $("weight").value = ["400","500","600","700","800","900"].includes(style.fontWeight) ? style.fontWeight : "400";
+      $("color").value = rgbHex(style.color,"#172033"); $("background").value = rgbHex(style.backgroundColor,"#ffffff");
+      $("padding").value = px(style.paddingTop); $("margin").value = px(style.marginTop); $("radius").value = px(style.borderTopLeftRadius);
+      $("align").value = ["left","center","right"].includes(style.textAlign) ? style.textAlign : "left"; $("width").value = Math.round(rect.width); $("height").value = Math.round(rect.height);
+      $("scope").value = state.scope; $("scope").querySelector('[value="same-component"]').disabled = !element.dataset.aiComponent;
+      $("hideElement").textContent = style.display === "none" ? "Show element" : "Hide element";
+      renderHierarchy(); renderSummary();
+    }
+
+    function addOperations(data) {
+      return data.map((entry) => {
+        const operation = { operationId:`operation-${state.operationCounter++}`, active:true, timestamp:stamp(), ...entry };
+        state.operations.push(operation); return operation.operationId;
+      });
+    }
+
+    function pushCommand(label, undo, redo, operationData) {
+      if (state.historyIndex < state.history.length) {
+        const removedIds = new Set(state.history.slice(state.historyIndex).flatMap((command) => command.operationIds));
+        state.operations = state.operations.filter((operation) => !removedIds.has(operation.operationId));
+        state.history = state.history.slice(0,state.historyIndex);
+      }
+      const operationIds = addOperations(operationData);
+      state.history.push({label,undo,redo,operationIds}); state.historyIndex = state.history.length;
+      setDirty(); refreshChangeMarks(); updateHistoryButtons();
+    }
+
+    function updateHistoryButtons() {
+      $("undo").disabled = state.historyIndex === 0; $("redo").disabled = state.historyIndex >= state.history.length;
+    }
+
+    function undo() {
+      if (!state.historyIndex) return status("Nothing to undo");
+      const command = state.history[state.historyIndex-1]; command.undo();
+      command.operationIds.forEach((id) => { const operation = state.operations.find((item) => item.operationId === id); if (operation) operation.active = false; });
+      state.historyIndex--; updateSelectionMarks(); refreshChangeMarks(); loadControls(); updateHistoryButtons(); status(`Undid: ${command.label}`);
+    }
+
+    function redo() {
+      if (state.historyIndex >= state.history.length) return status("Nothing to redo");
+      const command = state.history[state.historyIndex]; command.redo();
+      command.operationIds.forEach((id) => { const operation = state.operations.find((item) => item.operationId === id); if (operation) operation.active = true; });
+      state.historyIndex++; updateSelectionMarks(); refreshChangeMarks(); loadControls(); updateHistoryButtons(); status(`Redid: ${command.label}`);
+    }
+
+    function applyStyle(property,value) {
+      const elements = targets(); if (!elements.length) return;
+      const changes = elements.map((element) => ({element,id:ensureId(element),label:elementLabel(element),selector:selector(element),before:element.style.getPropertyValue(property),after:value}));
+      const apply = (key) => changes.forEach((change) => change[key] ? change.element.style.setProperty(property,change[key]) : change.element.style.removeProperty(property));
+      apply("after");
+      pushCommand(`Change ${property}`,()=>apply("before"),()=>apply("after"),changes.map((change) => ({aiId:change.id,selector:change.selector,label:change.label,section:sectionName(change.element),component:change.element.dataset.aiComponent||"",type:"set-style",property,before:change.before||getComputedStyle(change.element).getPropertyValue(property).trim(),after:value,scope:state.scope,viewport:state.viewport,targetIds:[change.id]})));
+      moveOverlay(primary()); loadControls();
+    }
+
+    function applyText(value) {
+      const element = primary(); if (!element || state.selected.length !== 1) return;
+      const nodes = editableTextNodes(element); if (!nodes.length) return;
+      const before = nodes.map((node) => node.nodeValue);
+      const after = nodes.map((node,index) => index === 0 ? value : "");
+      const apply = (values) => nodes.forEach((node,index) => node.nodeValue = values[index]);
+      apply(after);
+      pushCommand("Change visible text",()=>apply(before),()=>apply(after),[{aiId:ensureId(element),selector:selector(element),label:elementLabel(element),section:sectionName(element),component:element.dataset.aiComponent||"",type:"replace-text",property:"textContent",before:before.join(" ").trim(),after:value,scope:"selected-only",viewport:state.viewport,targetIds:[ensureId(element)]}]);
+      loadControls(); moveOverlay(element);
+    }
+
+    function resetStyles() {
+      const elements = targets(); if (!elements.length) return;
+      const changes = elements.map((element) => ({element,id:ensureId(element),before:element.getAttribute("style")||""}));
+      changes.forEach(({element}) => element.removeAttribute("style"));
+      pushCommand("Reset inline styles",()=>changes.forEach(({element,before}) => before ? element.setAttribute("style",before) : element.removeAttribute("style")),()=>changes.forEach(({element}) => element.removeAttribute("style")),changes.map((change)=>({aiId:change.id,selector:selector(change.element),label:elementLabel(change.element),section:sectionName(change.element),component:change.element.dataset.aiComponent||"",type:"reset-inline-styles",property:"style",before:change.before,after:"",scope:state.scope,viewport:state.viewport,targetIds:[change.id]})));
+      loadControls();
+    }
+
+    function toggleHidden() {
+      const elements = targets(); if (!elements.length) return;
+      const changes = elements.map((element) => ({element,id:ensureId(element),before:element.style.display,after:getComputedStyle(element).display === "none" ? "" : "none"}));
+      const apply = (key) => changes.forEach((change) => change[key] ? change.element.style.display = change[key] : change.element.style.removeProperty("display"));
+      apply("after");
+      pushCommand("Toggle visibility",()=>apply("before"),()=>apply("after"),changes.map((change)=>({aiId:change.id,selector:selector(change.element),label:elementLabel(change.element),section:sectionName(change.element),component:change.element.dataset.aiComponent||"",type:"set-style",property:"display",before:change.before||"visible/inherited",after:change.after||"visible/inherited",scope:state.scope,viewport:state.viewport,targetIds:[change.id]})));
+      loadControls();
+    }
+
+    function stripEditorMetadata(root) {
+      [root,...root.querySelectorAll("*")].forEach((element) => {
+        ["data-ai-id","data-ai-editor-selected","data-ai-editor-primary","data-ai-editor-change","data-ai-editor-dragging","data-ai-editor-draggable","data-ai-editor-original-draggable","data-ai-editor-drop-target"].forEach((name) => element.removeAttribute(name));
+      });
+    }
+
+    function normalizeCloneIds(root) {
+      const map = new Map();
+      [root,...root.querySelectorAll("*")].forEach((element) => {
+        if (!element.id) return;
+        const original = element.id; let count = 1, next;
+        do { next = `${original}-copy-${count++}`; } while (document.getElementById(next) || [...map.values()].includes(next));
+        map.set(original,next); element.id = next;
+      });
+      [root,...root.querySelectorAll("*")].forEach((element) => {
+        ["for","aria-labelledby","aria-describedby","aria-controls","aria-owns","list"].forEach((attribute) => {
+          const value = element.getAttribute(attribute); if (!value) return;
+          element.setAttribute(attribute,value.split(/\s+/).map((token)=>map.get(token)||token).join(" "));
+        });
+        const href = element.getAttribute("href"); if (href?.startsWith("#") && map.has(href.slice(1))) element.setAttribute("href",`#${map.get(href.slice(1))}`);
+      });
+    }
+
+    function duplicateSelected() {
+      const sources = state.selected.filter(isStructural); if (!sources.length) return;
+      const clones = sources.map((source) => {
+        const clone = source.cloneNode(true); stripEditorMetadata(clone); normalizeCloneIds(clone); source.parentNode.insertBefore(clone,source.nextSibling); ensureId(clone);
+        return {source,clone,parent:clone.parentNode,next:clone.nextSibling,id:ensureId(clone)};
+      });
+      const insert = () => clones.forEach(({clone,parent,next}) => parent.insertBefore(clone,next && next.parentNode===parent ? next : null));
+      const remove = () => clones.forEach(({clone}) => clone.remove());
+      state.selected = clones.map(({clone})=>clone); state.primary = state.selected.at(-1)||null;
+      pushCommand("Duplicate elements",remove,insert,clones.map(({source,clone,id})=>({aiId:id,selector:selector(clone),label:elementLabel(clone),section:sectionName(clone),component:clone.dataset.aiComponent||"",type:"duplicate",property:"DOM",before:`Not present; duplicated from ${elementLabel(source)}`,after:"New element added",scope:"current-selection",viewport:state.viewport,targetIds:[id]})));
+      setPath(state.primary); updateSelectionMarks(); loadControls();
+    }
+
+    function capturePositions(elements) { return elements.map((element)=>({element,parent:element.parentNode,next:element.nextSibling})); }
+    function restorePositions(snapshots) { [...snapshots].reverse().forEach(({element,parent,next})=>parent?.insertBefore(element,next&&next.parentNode===parent?next:null)); }
+
+    function deleteSelected() {
+      const elements = state.selected.filter(isStructural); if (!elements.length) return;
+      const positions = capturePositions(elements);
+      const remove = () => elements.forEach((element)=>element.remove());
+      const operations = elements.map((element)=>({aiId:ensureId(element),selector:selector(element),label:elementLabel(element),section:sectionName(element),component:element.dataset.aiComponent||"",type:"delete",property:"DOM",before:element.outerHTML.slice(0,500),after:"Element removed",scope:"current-selection",viewport:state.viewport,targetIds:[ensureId(element)]}));
+      remove(); pushCommand("Delete elements",()=>restorePositions(positions),remove,operations); clearSelection(); refreshChangeMarks();
+    }
+
+    function movePrimary(direction) {
+      const element = primary(); if (!isStructural(element) || !element.parentNode) return;
+      const sibling = direction < 0 ? element.previousElementSibling : element.nextElementSibling; if (!sibling) return status(direction<0?"Already first":"Already last");
+      const before = capturePositions([element,sibling]);
+      if (direction<0) element.parentNode.insertBefore(element,sibling); else element.parentNode.insertBefore(sibling,element);
+      const after = capturePositions([element,sibling]);
+      pushCommand(direction<0?"Move element up":"Move element down",()=>restorePositions(before),()=>restorePositions(after),[{aiId:ensureId(element),selector:selector(element),label:elementLabel(element),section:sectionName(element),component:element.dataset.aiComponent||"",type:"move",property:"DOM order",before:"Original position",after:direction<0?"Moved before previous sibling":"Moved after next sibling",scope:"selected-only",viewport:state.viewport,targetIds:[ensureId(element)]}]);
+      loadControls();
+    }
+
+    function updateDraggables() {
+      document.querySelectorAll("[data-ai-editor-draggable]").forEach((element) => {
+        const original = element.getAttribute("data-ai-editor-original-draggable");
+        original === "__none__" ? element.removeAttribute("draggable") : element.setAttribute("draggable",original);
+        element.removeAttribute("data-ai-editor-original-draggable"); element.removeAttribute("data-ai-editor-draggable");
+      });
+      if (!state.dragEnabled) return;
+      state.selected.filter(isStructural).forEach((element) => {
+        element.setAttribute("data-ai-editor-original-draggable",element.hasAttribute("draggable")?element.getAttribute("draggable"):"__none__");
+        element.setAttribute("draggable","true"); element.setAttribute("data-ai-editor-draggable","true");
+      });
+    }
+
+    function clearDropTargets() { document.querySelectorAll("[data-ai-editor-drop-target]").forEach((element)=>element.removeAttribute("data-ai-editor-drop-target")); }
+
+    function moveByDrop(elements,target,afterTarget) {
+      const movable = elements.filter((element)=>isStructural(element)&&element!==target&&!element.contains(target)); if (!movable.length || !target.parentNode) return;
+      const before = capturePositions(movable); const reference = afterTarget ? target.nextSibling : target;
+      movable.forEach((element)=>target.parentNode.insertBefore(element,reference)); const after = capturePositions(movable);
+      pushCommand("Drag and drop elements",()=>restorePositions(before),()=>restorePositions(after),movable.map((element)=>({aiId:ensureId(element),selector:selector(element),label:elementLabel(element),section:sectionName(element),component:element.dataset.aiComponent||"",type:"move",property:"DOM position",before:"Original parent and position",after:`${afterTarget?"After":"Before"} ${elementLabel(target)}`,scope:"current-selection",viewport:state.viewport,targetIds:[ensureId(element)]})));
+      updateSelectionMarks(); loadControls();
+    }
+
+    function interpret(note) { const value = note.toLowerCase(); return terms.filter((term)=>term[0].some((phrase)=>value.includes(phrase))).map((term)=>({term:term[1],suggestions:term[2]})); }
+    function hint() { const matches = interpret($("note").value); $("hint").innerHTML = matches.length ? matches.map((item)=>`<strong>${esc(item.term)}</strong>: ${esc(item.suggestions)}`).join("<br>") : "No standard phrase detected. ChatGPT will infer cautiously from the target and exact edits."; }
+
+    function addFeedback() {
+      const note = $("note").value.trim(); if (!state.selected.length) return; if (!note) return status("Add a comment first");
+      state.selected.filter((element)=>document.contains(element)).forEach((element) => {
+        const item = {target:context(element),note,heuristicInterpretation:interpret(note),scope:state.scope,viewport:state.viewport};
+        const index = state.items.findIndex((existing)=>existing.target.aiId===item.target.aiId); if (index>=0) state.items[index]=item; else state.items.push(item);
+      });
+      $("note").value = ""; hint(); setDirty(); renderFeedbackList(); refreshChangeMarks(); status("Feedback added");
+    }
+
+    function renderFeedbackList() {
+      const list = $("feedbackList");
+      list.innerHTML = state.items.length ? state.items.map((item,index)=>`<div class="feedbackItem"><div class="feedbackTop"><div><div class="feedbackTitle">${index+1}. ${esc(item.target.label)}</div><div class="mini">${esc(item.target.section)} - ${esc(item.viewport)}</div></div><button class="removeFeedback" data-remove-feedback="${esc(item.target.aiId)}">Remove</button></div><div style="margin-top:5px">${esc(item.note)}</div></div>`).join("") : '<div class="meta">No feedback targets added.</div>';
+      renderSummary();
+    }
+
+    function renderSummary() { $("summary").textContent = `${state.items.length} feedback target${state.items.length===1?"":"s"}; ${state.operations.filter((operation)=>operation.active).length} active change${state.operations.filter((operation)=>operation.active).length===1?"":"s"}.`; }
+
+    function operationMarker(type) { if (type==="duplicate") return "added"; if (type==="move") return "moved"; if (type==="delete") return "deleted"; return "edited"; }
+    function refreshChangeMarks() {
+      document.querySelectorAll("[data-ai-editor-change]").forEach((element)=>element.removeAttribute("data-ai-editor-change"));
+      const markers = new Map();
+      const add = (id,marker) => { if (!id || marker==="deleted") return; if (!markers.has(id)) markers.set(id,new Set()); markers.get(id).add(marker); };
+      state.operations.filter((operation)=>operation.active).forEach((operation)=>(operation.targetIds||[operation.aiId]).forEach((id)=>add(id,operationMarker(operation.type))));
+      state.items.forEach((item)=>add(item.target.aiId,"feedback"));
+      markers.forEach((values,id)=>document.querySelector(`[data-ai-id="${CSS.escape(id)}"]`)?.setAttribute("data-ai-editor-change",[...values].join(" ")));
+      changeStyle.disabled = !state.highlightsEnabled; renderSummary();
+    }
+
+    function buildMd() {
+      let items=[...state.items]; if(!items.length&&state.primary)items=[{target:context(state.primary),note:$("note").value.trim(),heuristicInterpretation:interpret($("note").value),scope:state.scope,viewport:state.viewport}];
+      const operations = state.operations.filter((operation)=>operation.active);
+      const out=["# AI website revision request","","## Processing instruction for ChatGPT","","Treat the attached HTML as the source of truth. Before modifying it, silently translate the feedback into precise design terms such as hierarchy, emphasis, contrast, density, whitespace, alignment, rhythm, typography, surface separation, responsive scope, and component consistency.","","Validate heuristic interpretations against exact target metadata and browser operations. Prefer explicit before/after edits over vague prose. Apply the smallest coherent changes, preserve unrelated behavior and stable `data-ai-*` identifiers, keep the built-in editor, and return one complete self-contained HTML file.","","## Page context","",`- Title: ${md(document.title)}`,`- URL: ${md(location.href)}`,`- Viewport: ${innerWidth} × ${innerHeight}`,`- Editor version: ${VERSION}`,`- Exported: ${stamp()}`,"","## Feedback targets",""];
       if(!items.length)out.push("_No target was captured._","");
-      items.forEach((item,i)=>{out.push(`### ${i+1}. ${md(item.target.label)}`,"",`- Section: ${md(item.target.section)}`,`- Component: ${md(item.target.component||"Not specified")}`,`- Stable ID: \`${md(item.target.aiId)}\``,`- Selector: \`${md(item.target.selector)}\``,`- Visible text: ${md(item.target.visibleText||"None")}`,`- Scope: ${md(item.scope)}`,`- Viewport: ${md(item.viewport)}`,"","#### User feedback","",item.note||"_No written note. Use exact operations._","","#### Heuristic interpretation","",item.heuristicInterpretation.length?item.heuristicInterpretation.map(x=>`- ${md(x.term)}: ${md(x.suggestions)}`).join("\n"):"_No heuristic match. Infer cautiously._","","#### Target context","","```json",JSON.stringify(item.target,null,2),"```","")});
+      items.forEach((item,index)=>{out.push(`### ${index+1}. ${md(item.target.label)}`,"",`- Section: ${md(item.target.section)}`,`- Component: ${md(item.target.component||"Not specified")}`,`- Stable ID: \`${md(item.target.aiId)}\``,`- Selector: \`${md(item.target.selector)}\``,`- Visible text: ${md(item.target.visibleText||"None")}`,`- Scope: ${md(item.scope)}`,`- Viewport: ${md(item.viewport)}`,"","#### User feedback","",item.note||"_No written note. Use exact operations._","","#### Heuristic interpretation","",item.heuristicInterpretation.length?item.heuristicInterpretation.map((entry)=>`- ${md(entry.term)}: ${md(entry.suggestions)}`).join("\n"):"_No heuristic match. Infer cautiously._","","#### Target context","","```json",JSON.stringify(item.target,null,2),"```","")});
       out.push("## Exact browser operations","","Treat these as stronger evidence than vague wording.","");
-      if(!state.operations.length)out.push("_No direct edits recorded._","");
-      else{out.push("| Target | Operation | Property | Before | After | Scope | Viewport |","|---|---|---|---|---|---|---|");state.operations.forEach(o=>out.push(`| ${md(o.label)} | ${md(o.type)} | \`${md(o.property)}\` | \`${md(o.before)}\` | \`${md(o.after)}\` | ${md(o.scope)} | ${md(o.viewport)} |`));out.push("","```json",JSON.stringify(state.operations,null,2),"```","")}
+      if(!operations.length)out.push("_No direct edits recorded._","");
+      else{out.push("| Target | Operation | Property | Before | After | Scope | Viewport |","|---|---|---|---|---|---|---|");operations.forEach((operation)=>out.push(`| ${md(operation.label)} | ${md(operation.type)} | \`${md(operation.property)}\` | \`${md(operation.before)}\` | \`${md(operation.after)}\` | ${md(operation.scope)} | ${md(operation.viewport)} |`));out.push("","```json",JSON.stringify(operations,null,2),"```","")}
       out.push("## Constraints","","- Preserve unrelated content, interactions, and responsive behavior.","- Keep one self-contained HTML file.","- Preserve the visual editor and stable identifiers.","- Consolidate inline styles into maintainable CSS when appropriate.","- Maintain accessible contrast and keyboard usability.","");
       return out.join("\n");
     }
-    async function copy(){ const value=buildMd(); try{await navigator.clipboard.writeText(value)}catch{const t=document.createElement("textarea");t.value=value;document.body.appendChild(t);t.select();document.execCommand("copy");t.remove()} status("Markdown copied"); }
-    function download(content,name,type){const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000)}
-    const filename=()=> (document.title||"prototype").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"prototype";
 
-    document.addEventListener("mousemove",e=>{if(state.selecting&&isCanvas(e.target))move(e.target)},true);
-    document.addEventListener("click",e=>{if(state.selecting&&isCanvas(e.target)){e.preventDefault();e.stopPropagation();select(e.target)}},true);
-    addEventListener("scroll",()=>state.selected&&move(state.selected),{passive:true}); addEventListener("resize",()=>state.selected&&move(state.selected));
+    async function copyMarkdown() {
+      const value = buildMd();
+      try { await navigator.clipboard.writeText(value); }
+      catch { const textarea=document.createElement("textarea");textarea.value=value;document.body.appendChild(textarea);textarea.select();document.execCommand("copy");textarea.remove(); }
+      status("Markdown copied");
+    }
 
-    $("pick").onclick=()=>setSelecting(!state.selecting);
-    $("close").onclick=$("hide").onclick=()=>{panel.classList.remove("open");launch.style.display="block";setSelecting(false);overlay.style.display="none"};
-    launch.onclick=()=>{panel.classList.add("open");launch.style.display="none";move(state.selected)};
-    $("scope").onchange=e=>{state.scope=e.target.value;load()}; $("viewport").onchange=e=>state.viewport=e.target.value;
-    $("text").oninput=e=>text(e.target.value); $("fontSize").oninput=e=>style("font-size",e.target.value+"px"); $("weight").onchange=e=>style("font-weight",e.target.value);
-    $("color").oninput=e=>style("color",e.target.value); $("background").oninput=e=>style("background-color",e.target.value); $("padding").oninput=e=>style("padding",e.target.value+"px");
-    $("margin").oninput=e=>style("margin",e.target.value+"px"); $("radius").oninput=e=>style("border-radius",e.target.value+"px"); $("align").onchange=e=>style("text-align",e.target.value);
-    $("width").oninput=e=>style("width",e.target.value+"px"); $("height").oninput=e=>style("height",e.target.value+"px"); $("note").oninput=hint; $("add").onclick=add;
-    $("undo").onclick=()=>{const o=state.operations.pop();if(!o)return status("Nothing to undo");const el=document.querySelector(o.selector);if(!el)return;if(o.type==="replace-text")el.textContent=o.before;else if(o.type==="reset-inline-styles"){if(o.before)el.setAttribute("style",o.before);else el.removeAttribute("style")}else{o.before?el.style.setProperty(o.property,o.before):el.style.removeProperty(o.property)}load();move(state.selected);status("Undone")};
-    $("reset").onclick=()=>{targets().forEach(el=>{const before=el.getAttribute("style")||"";el.removeAttribute("style");record(el,"reset-inline-styles","style",before,"")});load();move(state.selected);status("Inline styles reset")};
-    $("clear").onclick=()=>{state.operations=[];state.items=[];$("note").value="";hint();summary();status("Feedback cleared")};
-    $("copy").onclick=copy; $("downloadMd").onclick=()=>{download(buildMd(),filename()+"-feedback.md","text/markdown;charset=utf-8");status("Markdown downloaded")};
-    $("downloadHtml").onclick=()=>{const clone=document.documentElement.cloneNode(true);clone.querySelector("#__ai_editor_host")?.remove();clone.querySelector("#__ai_editor_overlay")?.remove();download("<!doctype html>\n"+clone.outerHTML,filename()+"-edited.html","text/html;charset=utf-8");status("HTML downloaded")};
-    hint(); summary();
+    function download(content,name,type) { const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),anchor=document.createElement("a");anchor.href=url;anchor.download=name;document.body.appendChild(anchor);anchor.click();anchor.remove();setTimeout(()=>URL.revokeObjectURL(url),1000); }
+    const filename = () => (document.title||"prototype").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"prototype";
+
+    function cleanClone(clone) {
+      clone.querySelector(`#${CSS.escape(HOST_ID)}`)?.remove(); clone.querySelector(`#${CSS.escape(OVERLAY_ID)}`)?.remove();
+      clone.querySelector(`#${CSS.escape(INTERACTION_STYLE_ID)}`)?.remove(); clone.querySelector(`#${CSS.escape(CHANGE_STYLE_ID)}`)?.remove();
+      clone.querySelectorAll("[data-ai-editor-original-draggable]").forEach((element)=>{const original=element.getAttribute("data-ai-editor-original-draggable");original==="__none__"?element.removeAttribute("draggable"):element.setAttribute("draggable",original)});
+      clone.querySelectorAll("*").forEach((element)=>["data-ai-editor-selected","data-ai-editor-primary","data-ai-editor-change","data-ai-editor-dragging","data-ai-editor-draggable","data-ai-editor-original-draggable","data-ai-editor-drop-target"].forEach((attribute)=>element.removeAttribute(attribute)));
+    }
+
+    document.addEventListener("mousemove",(event)=>{
+      if (!state.selecting) return; const candidate=candidateFromEvent(event); state.hover=candidate; moveOverlay(candidate); if(candidate) $("selectionHudText").textContent=`Select: ${elementLabel(candidate)}`;
+    },true);
+
+    document.addEventListener("pointerdown",(event)=>{
+      if (!state.selecting) return; const candidate=candidateFromEvent(event); if(!candidate) return;
+      event.preventDefault(); event.stopPropagation(); event.stopImmediatePropagation(); addSelection(candidate,state.multiSelect||event.shiftKey);
+      if(state.multiSelect||event.shiftKey){$("selectionHudText").textContent=`${state.selected.length} selected - choose more or click Done`;moveOverlay(candidate)} else finishSelectionMode();
+    },true);
+
+    document.addEventListener("dragstart",(event)=>{
+      if(!state.dragEnabled)return;const target=candidateFromEvent(event)?.closest?.("[data-ai-editor-draggable]");if(!target)return;
+      if(!state.selected.includes(target))addSelection(target,false);state.dragging=state.selected.filter(isStructural);state.dragging.forEach((element)=>element.setAttribute("data-ai-editor-dragging","true"));event.dataTransfer?.setData("text/plain","ai-prototype-editor");if(event.dataTransfer)event.dataTransfer.effectAllowed="move";
+    },true);
+    document.addEventListener("dragover",(event)=>{
+      if(!state.dragEnabled||!state.dragging.length)return;const target=candidateFromEvent(event);if(!isStructural(target)||state.dragging.includes(target))return;event.preventDefault();clearDropTargets();const rect=target.getBoundingClientRect();target.setAttribute("data-ai-editor-drop-target",event.clientY>rect.top+rect.height/2?"after":"before");
+    },true);
+    document.addEventListener("drop",(event)=>{
+      if(!state.dragEnabled||!state.dragging.length)return;const target=candidateFromEvent(event);if(!isStructural(target))return;event.preventDefault();event.stopPropagation();const after=target.getAttribute("data-ai-editor-drop-target")==="after";moveByDrop(state.dragging,target,after);state.dragging.forEach((element)=>element.removeAttribute("data-ai-editor-dragging"));state.dragging=[];clearDropTargets();
+    },true);
+    document.addEventListener("dragend",()=>{state.dragging.forEach((element)=>element.removeAttribute("data-ai-editor-dragging"));state.dragging=[];clearDropTargets()},true);
+    addEventListener("scroll",()=>moveOverlay(state.selecting?state.hover:primary()),{passive:true}); addEventListener("resize",()=>moveOverlay(state.selecting?state.hover:primary()));
+    addEventListener("beforeunload",(event)=>{if(!state.dirty)return;event.preventDefault();event.returnValue=""});
+    document.addEventListener("keydown",(event)=>{if(event.key==="Escape"&&state.selecting)cancelSelectionMode();if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==="z"){event.preventDefault();event.shiftKey?redo():undo()}},true);
+
+    $("pick").onclick=startSelectionMode;
+    $("finishSelection").onclick=finishSelectionMode; $("cancelSelection").onclick=cancelSelectionMode;
+    $("multi").onclick=()=>{state.multiSelect=!state.multiSelect;$("multi").textContent=`Multiple select: ${state.multiSelect?"on":"off"}`;$("multi").classList.toggle("activeBtn",state.multiSelect)};
+    $("clearSelection").onclick=clearSelection;
+    $("selectionLevel").onchange=(event)=>changePrimaryByPath(Number(event.target.value));
+    $("deeperSelection").onclick=()=>changePrimaryByPath(state.selectionPathIndex-1); $("biggerSelection").onclick=()=>changePrimaryByPath(state.selectionPathIndex+1);
+    $("scope").onchange=(event)=>{state.scope=event.target.value;loadControls()}; $("viewport").onchange=(event)=>state.viewport=event.target.value;
+    $("text").onchange=(event)=>applyText(event.target.value); $("fontSize").onchange=(event)=>applyStyle("font-size",`${event.target.value}px`); $("weight").onchange=(event)=>applyStyle("font-weight",event.target.value);
+    $("color").onchange=(event)=>applyStyle("color",event.target.value); $("background").onchange=(event)=>applyStyle("background-color",event.target.value); $("padding").onchange=(event)=>applyStyle("padding",`${event.target.value}px`);
+    $("margin").onchange=(event)=>applyStyle("margin",`${event.target.value}px`); $("radius").onchange=(event)=>applyStyle("border-radius",`${event.target.value}px`); $("align").onchange=(event)=>applyStyle("text-align",event.target.value);
+    $("width").onchange=(event)=>applyStyle("width",`${event.target.value}px`); $("height").onchange=(event)=>applyStyle("height",`${event.target.value}px`);
+    $("undo").onclick=undo; $("redo").onclick=redo; $("reset").onclick=resetStyles; $("hideElement").onclick=toggleHidden;
+    $("duplicate").onclick=duplicateSelected; $("delete").onclick=deleteSelected; $("moveUp").onclick=()=>movePrimary(-1); $("moveDown").onclick=()=>movePrimary(1);
+    $("dragToggle").onclick=()=>{state.dragEnabled=!state.dragEnabled;$("dragToggle").classList.toggle("active",state.dragEnabled);$("dragTitle").textContent=`Drag and drop: ${state.dragEnabled?"on":"off"}`;updateDraggables();status(state.dragEnabled?"Drag and drop enabled":"Drag and drop disabled")};
+    $("note").oninput=hint; $("add").onclick=addFeedback;
+    $("feedbackList").onclick=(event)=>{const button=event.target.closest("[data-remove-feedback]");if(!button)return;state.items=state.items.filter((item)=>item.target.aiId!==button.dataset.removeFeedback);setDirty();renderFeedbackList();refreshChangeMarks()};
+    $("highlightToggle").onchange=(event)=>{state.highlightsEnabled=event.target.checked;refreshChangeMarks()};
+    $("clear").onclick=()=>{state.operations=[];state.items=[];state.history=[];state.historyIndex=0;$("note").value="";hint();renderFeedbackList();refreshChangeMarks();updateHistoryButtons();setDirty();status("Feedback log cleared")};
+    $("copy").onclick=copyMarkdown; $("copyAgain").onclick=copyMarkdown;
+    $("downloadMd").onclick=()=>{download(buildMd(),`${filename()}-feedback.md`,"text/markdown;charset=utf-8");status("Markdown downloaded")};
+    $("downloadHtml").onclick=()=>{const clone=document.documentElement.cloneNode(true);cleanClone(clone);download(`<!doctype html>\n${clone.outerHTML}`,`${filename()}-edited.html`,"text/html;charset=utf-8");status("HTML downloaded")};
+
+    const hidePanel=()=>{panel.classList.remove("open");launch.style.display="block";if(state.selecting)cancelSelectionMode();moveOverlay(null)};
+    $("close").onclick=hidePanel; $("hide").onclick=hidePanel; launch.onclick=()=>{panel.classList.add("open");launch.style.display="none";moveOverlay(primary())};
+    host.__aiEditorOpen=()=>{if(state.selecting)finishSelectionMode();else{panel.classList.add("open");launch.style.display="none";moveOverlay(primary())}};
+
+    hint(); renderFeedbackList(); updateSelectionMarks(); refreshChangeMarks(); loadControls(); updateHistoryButtons();
   })();
   </script>
 </body>
